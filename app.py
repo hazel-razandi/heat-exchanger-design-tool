@@ -295,8 +295,7 @@ with tab1:
     with col_calc2:
         save_design = st.button("💾 Save Design", use_container_width=True)
     with col_calc3:
-        clear_button = st.button("🗑️ Clear", use_container_width=True)
-        with tab2:
+        clear_button = st.button("🗑️ Clear", use_container_width=True) with tab2:
     st.header("Results & Advanced Analysis")
     
     if st.session_state.current_results:
@@ -545,7 +544,7 @@ with tab5:
     
     ## 👤 About
     
-    **Created by:** KAKAROTONCLOUD 
+    **Created by:** Your Name
     
     **GitHub:** [View Source Code](https://github.com/yourusername/heat-exchanger-design-tool)
     
