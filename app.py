@@ -454,6 +454,6 @@ with tab3:
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #666;'>
-    Made with ❤️ using Streamlit | Heat Exchanger Design Tool v1.0
+    Made with ❤️ using Streamlit by KAKAROTONCLOUD | Heat Exchanger Design Tool v1.0
 </div>
 """, unsafe_allow_html=True)
