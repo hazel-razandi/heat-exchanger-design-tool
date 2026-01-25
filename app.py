@@ -447,7 +447,7 @@ with tab3:
     
     **GitHub:** [View Source Code](#)
     
-    **Created by:** Your Name
+    **Created by:** KAKAROTONCLOUD
     """)
 
 # Footer
