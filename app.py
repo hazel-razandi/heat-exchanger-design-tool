@@ -4,6 +4,7 @@ Developed by KAKAROTONCLOUD
 """
 import streamlit as st
 import plotly.graph_objects as go
+import math
 from datetime import datetime
 
 # --- IMPORT CORE MODULES ---
@@ -14,7 +15,9 @@ from src.utils import validate_temperatures, generate_temperature_profile
 from src.pressure_drop import PressureDropCalculator
 from src.cost_estimator import CostEstimator
 from src.pdf_generator import generate_text_report
+# NEW IMPORTS FOR PRO FEATURES
 from src.excel_exporter import generate_excel_datasheet
+from src.geometry_plotter import plot_tube_layout
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
@@ -28,6 +31,7 @@ st.markdown("""
 <style>
     .big-metric {font-size: 32px !important; font-weight: bold;}
     .stAlert {border-radius: 8px;}
+    .main-header {font-size: 2rem; font-weight: 700; color: #333;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -36,8 +40,9 @@ if 'results' not in st.session_state: st.session_state.results = None
 
 # --- SIDEBAR SETTINGS ---
 with st.sidebar:
-    st.header("🏭 ExchangerPro")
-    st.caption("v3.0.0 Enterprise | KAKAROTONCLOUD")
+    st.image("https://cdn-icons-png.flaticon.com/512/2103/2103633.png", width=50)
+    st.markdown("### ExchangerPro")
+    st.caption("v3.1 Enterprise | KAKAROTONCLOUD")
     st.divider()
     
     st.subheader("⚙️ Design Basis")
@@ -53,7 +58,7 @@ with st.sidebar:
     st.info(f"Fouling Factor: {fouling_factor} m²K/W")
 
 # --- MAIN DASHBOARD ---
-st.title("Heat Exchanger Design Suite")
+st.markdown('<div class="main-header">🔥 Heat Exchanger Design Suite</div>', unsafe_allow_html=True)
 st.markdown("---")
 
 col_main_1, col_main_2, col_main_3 = st.columns([1, 1, 0.8])
@@ -120,59 +125,100 @@ with col_main_3:
         except Exception as e:
             st.error(f"Simulation Error: {str(e)}")
 
-# --- RESULTS ---
+# --- RESULTS DASHBOARD ---
 if st.session_state.results:
     res = st.session_state.results
     
     st.divider()
+    # KPI METRICS
     k1, k2, k3, k4 = st.columns(4)
     k1.metric("Thermal Duty", f"{res['Q']:.1f} kW")
     k2.metric("Surface Area", f"{res['area']:.1f} m²")
     k3.metric("LMTD", f"{res['LMTD']:.1f} °C")
     k4.metric("Est. Cost", f"${res['financials']['total_capex']:,.0f}")
 
-    t1, t2, t3 = st.tabs(["📈 Performance", "⚙️ Mechanical", "📄 Report"])
+    # TABS
+    t1, t2, t3 = st.tabs(["📈 Thermal Profile", "⚙️ Mechanical & Hydraulics", "💰 Cost & Report"])
     
+    # TAB 1: THERMAL GRAPH
     with t1:
         x, th, tc = generate_temperature_profile(res['T_hot_in'], res['T_hot_out'], res['T_cold_in'], res['T_cold_out'], flow_arr)
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=x*100, y=th, name='Hot Stream', line=dict(color='#FF4B4B')))
-        fig.add_trace(go.Scatter(x=x*100, y=tc, name='Cold Stream', line=dict(color='#0068C9')))
-        fig.update_layout(title="Temperature Profile", xaxis_title="Length %", yaxis_title="Temp °C", height=400)
+        fig.add_trace(go.Scatter(x=x*100, y=th, name='Hot Stream', line=dict(color='#FF4B4B', width=3)))
+        fig.add_trace(go.Scatter(x=x*100, y=tc, name='Cold Stream', line=dict(color='#0068C9', width=3)))
+        fig.update_layout(title="Temperature Profile (T-Q Diagram)", xaxis_title="Length %", yaxis_title="Temp °C", height=400)
         st.plotly_chart(fig, use_container_width=True)
 
+    # TAB 2: MECHANICAL LAYOUT (NEW FEATURE)
     with t2:
-        hyd = res['hydraulics']
-        c1, c2 = st.columns(2)
-        with c1:
-            st.markdown("**Hydraulics**")
-            st.write(f"Velocity: {hyd['velocity_m_s']:.2f} m/s")
-            st.write(f"Pressure Drop: {hyd['pressure_drop_kPa']:.2f} kPa")
-            if hyd['alerts']:
-                for a in hyd['alerts']: st.warning(a)
-        with c2:
-            st.markdown("**Cost Breakdown**")
-            fin = res['financials']
-            st.write(f"Equipment: ${fin['equipment_fob']:,.2f}")
-            st.write(f"Installation: ${fin['installation']:,.2f}")
-            st.write(f"Indirects: ${fin['indirects']:,.2f}")
+        col_mech_1, col_mech_2 = st.columns([1, 1])
+        
+        with col_mech_1:
+            st.markdown("#### 📐 Tube Bundle Layout (TEMA)")
+            # Calculate Geometry for Plotter
+            tube_od = 0.01905 # 3/4 inch standard
+            # Estimate Number of Tubes based on Area
+            calc_area = res.get('area', 10)
+            if calc_area < 1: calc_area = 1
+            # Approx 6m tube length
+            est_n_tubes = int(calc_area / (math.pi * tube_od * 6.0)) 
+            if est_n_tubes < 5: est_n_tubes = 5 # Minimum to show plot
+            
+            # Estimate Shell Diameter
+            est_shell_id = math.sqrt(est_n_tubes) * tube_od * 1.5 
+            
+            # Draw Plot
+            img_buf = plot_tube_layout(est_n_tubes, est_shell_id, tube_od)
+            st.image(img_buf, caption=f"Generated Cross-Section ({est_n_tubes} Tubes)", use_column_width=True)
 
+        with col_mech_2:
+            st.markdown("#### 🌊 Hydraulic Data")
+            hyd = res['hydraulics']
+            st.write(f"**Tube Velocity:** {hyd['velocity_m_s']:.2f} m/s")
+            st.write(f"**Reynolds No:** {hyd['reynolds']:.0f}")
+            
+            # Flow Regime Badge
+            if hyd['reynolds'] > 4000:
+                st.success(f"Regime: {hyd['regime']} (Efficient)")
+            elif hyd['reynolds'] < 2300:
+                st.warning(f"Regime: {hyd['regime']} (Poor Heat Transfer)")
+            else:
+                st.info(f"Regime: {hyd['regime']}")
+                
+            st.metric("Pressure Drop", f"{hyd['pressure_drop_kPa']:.2f} kPa")
+            
+            # Alerts
+            if hyd.get('alerts'):
+                st.markdown("---")
+                for alert in hyd['alerts']:
+                    st.error(f"⚠️ {alert}")
+
+    # TAB 3: COST & REPORT (NEW EXCEL BUTTON)
     with t3:
-        pname = st.text_input("Project Reference", "HX-Project-001")
+        fin = res['financials']
+        st.markdown("#### 💵 Class 4 Cost Estimate")
+        
+        cost_cols = st.columns(3)
+        cost_cols[0].metric("Equipment (FOB)", f"${fin['equipment_fob']:,.0f}")
+        cost_cols[1].metric("Installation", f"${fin['installation']:,.0f}")
+        cost_cols[2].metric("Total CAPEX", f"${fin['total_capex']:,.0f}", delta_color="inverse")
+        
+        st.divider()
+        st.markdown("#### 📄 Project Documentation")
+        pname = st.text_input("Project Reference ID", "HX-2024-001")
         
         c_txt, c_xls = st.columns(2)
         
         with c_txt:
-            if st.button("Generate Spec Sheet (Text)"):
+            if st.button("📄 Download Spec Sheet (.txt)"):
                 rep = generate_text_report(res, res.get('hydraulics'), res.get('financials'), res['meta'], {'project_name': pname})
-                st.download_button("Download Spec (.txt)", rep, f"{pname}.txt")
+                st.download_button("Click to Download Text Report", rep, f"{pname}_Spec.txt")
         
         with c_xls:
-            # Excel Logic
-            if st.button("Generate Datasheet (Excel)"):
+            if st.button("📊 Download Datasheet (.xlsx)"):
                 excel_file = generate_excel_datasheet(res, {'project_name': pname})
                 st.download_button(
-                    label="Download Datasheet (.xlsx)",
+                    label="Click to Download Excel",
                     data=excel_file,
                     file_name=f"{pname}_Datasheet.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
