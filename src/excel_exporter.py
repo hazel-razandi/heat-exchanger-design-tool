@@ -1,7 +1,7 @@
 """
 Excel Datasheet Generator (TEMA Style)
 Author: KAKAROTONCLOUD
-Version: 3.0.0 Enterprise
+Version: 3.1.0 Enterprise
 """
 import io
 import xlsxwriter
@@ -13,112 +13,118 @@ def generate_excel_datasheet(res, project_info):
     """
     output = io.BytesIO()
     workbook = xlsxwriter.Workbook(output, {'in_memory': True})
-    sheet = workbook.add_worksheet("TEMA Datasheet")
+    sheet = workbook.add_worksheet("Datasheet")
 
-    # --- FORMATS ---
-    bold_header = workbook.add_format({'bold': True, 'font_size': 14, 'align': 'center', 'bg_color': '#D9E1F2', 'border': 1})
-    section_header = workbook.add_format({'bold': True, 'font_size': 11, 'bg_color': '#D9D9D9', 'border': 1})
-    label_fmt = workbook.add_format({'bold': True, 'align': 'right', 'border': 1})
-    data_fmt = workbook.add_format({'align': 'left', 'border': 1})
-    center_fmt = workbook.add_format({'align': 'center', 'border': 1})
-    num_fmt = workbook.add_format({'num_format': '#,##0.00', 'border': 1})
+    # --- STYLES ---
+    # Header Style
+    fmt_header = workbook.add_format({
+        'bold': True, 'font_size': 14, 'align': 'center', 'valign': 'vcenter',
+        'bg_color': '#1f4e78', 'font_color': 'white', 'border': 1
+    })
+    # Section Label Style
+    fmt_section = workbook.add_format({
+        'bold': True, 'bg_color': '#d9e1f2', 'border': 1
+    })
+    # Parameter Label Style
+    fmt_label = workbook.add_format({
+        'bold': True, 'align': 'right', 'border': 1, 'bg_color': '#f2f2f2'
+    })
+    # Data Style
+    fmt_data = workbook.add_format({
+        'align': 'center', 'border': 1
+    })
+    # Money Style
+    fmt_currency = workbook.add_format({
+        'num_format': '$#,##0.00', 'border': 1, 'bg_color': '#e2efda'
+    })
     
-    # Set Column Widths
-    sheet.set_column('A:A', 5)   # Margin
+    # Columns
+    sheet.set_column('A:A', 2)   # Margin
     sheet.set_column('B:B', 25)  # Labels
-    sheet.set_column('C:C', 20)  # Data 1
-    sheet.set_column('D:D', 20)  # Data 2
+    sheet.set_column('C:C', 20)  # Hot Side
+    sheet.set_column('D:D', 20)  # Cold Side
     
-    # --- HEADER ---
-    sheet.merge_range('B2:D2', "HEAT EXCHANGER SPECIFICATION SHEET", bold_header)
-    sheet.write('B3', "Project:", label_fmt)
-    sheet.merge_range('C3:D3', project_info.get('project_name', 'Untitled'), data_fmt)
-    sheet.write('B4', "Date:", label_fmt)
-    sheet.merge_range('C4:D4', datetime.now().strftime('%Y-%m-%d'), data_fmt)
+    # --- TITLE BLOCK ---
+    sheet.merge_range('B2:D3', "HEAT EXCHANGER SPECIFICATION SHEET", fmt_header)
+    sheet.write('B4', "Project:", fmt_label)
+    sheet.merge_range('C4:D4', project_info.get('project_name', 'Untitled'), fmt_data)
+    sheet.write('B5', "Date:", fmt_label)
+    sheet.merge_range('C5:D5', datetime.now().strftime('%Y-%m-%d'), fmt_data)
     
-    # --- 1. PERFORMANCE DATA ---
-    row = 6
-    sheet.merge_range(row, 1, row, 3, "1. PERFORMANCE DATA", section_header)
+    # --- PERFORMANCE ---
+    row = 7
+    sheet.merge_range(row, 1, row, 3, "1. PERFORMANCE DATA", fmt_section)
+    row += 1
+    sheet.write(row, 1, "PARAMETER", fmt_label)
+    sheet.write(row, 2, "HOT SIDE", fmt_label)
+    sheet.write(row, 3, "COLD SIDE", fmt_label)
     row += 1
     
-    # Headers
-    sheet.write(row, 1, "PARAMETER", center_fmt)
-    sheet.write(row, 2, "HOT SIDE", center_fmt)
-    sheet.write(row, 3, "COLD SIDE", center_fmt)
-    row += 1
-    
-    # Data Rows
-    items = [
-        ("Fluid Name", res.get('hot_fluid'), res.get('cold_fluid')),
+    # Data Loop
+    data_rows = [
+        ("Fluid", res.get('hot_fluid'), res.get('cold_fluid')),
         ("Flow Rate (kg/s)", res.get('m_hot'), res.get('m_cold')),
         ("Inlet Temp (°C)", res.get('T_hot_in'), res.get('T_cold_in')),
         ("Outlet Temp (°C)", res.get('T_hot_out'), res.get('T_cold_out')),
     ]
     
-    for label, h_val, c_val in items:
-        sheet.write(row, 1, label, label_fmt)
-        sheet.write(row, 2, h_val, num_fmt if isinstance(h_val, (int, float)) else center_fmt)
-        sheet.write(row, 3, c_val, num_fmt if isinstance(c_val, (int, float)) else center_fmt)
+    for label, h, c in data_rows:
+        sheet.write(row, 1, label, fmt_label)
+        sheet.write(row, 2, h, fmt_data)
+        sheet.write(row, 3, c, fmt_data)
         row += 1
         
-    # Calculated Performance
-    sheet.write(row, 1, "Total Heat Duty (kW)", label_fmt)
-    sheet.merge_range(row, 2, row, 3, res.get('Q', 0), num_fmt)
+    # Calculated
+    sheet.write(row, 1, "Duty (kW)", fmt_label)
+    sheet.merge_range(row, 2, row, 3, res.get('Q', 0), fmt_data)
     row += 1
-    sheet.write(row, 1, "LMTD (°C)", label_fmt)
-    sheet.merge_range(row, 2, row, 3, res.get('LMTD', 0), num_fmt)
-    row += 1
-    
-    # --- 2. CONSTRUCTION DATA ---
-    row += 1
-    sheet.merge_range(row, 1, row, 3, "2. CONSTRUCTION & HYDRAULICS", section_header)
+    sheet.write(row, 1, "LMTD (°C)", fmt_label)
+    sheet.merge_range(row, 2, row, 3, res.get('LMTD', 0), fmt_data)
     row += 1
     
-    meta = res.get('meta', {})
+    # --- MECHANICAL ---
+    row += 1
+    sheet.merge_range(row, 1, row, 3, "2. MECHANICAL & HYDRAULIC", fmt_section)
+    row += 1
+    
     hyd = res.get('hydraulics', {})
+    meta = res.get('meta', {})
     
-    const_items = [
+    mech_rows = [
         ("Configuration", meta.get('config', 'N/A')),
-        ("Material", meta.get('material', 'N/A')),
-        ("Fouling Factor", meta.get('fouling', 0)),
-        ("Required Area (m²)", res.get('area', 0)),
+        ("Surface Area (m²)", res.get('area', 0)),
         ("Tube Velocity (m/s)", hyd.get('velocity_m_s', 0)),
         ("Pressure Drop (kPa)", hyd.get('pressure_drop_kPa', 0)),
         ("Flow Regime", hyd.get('regime', 'N/A'))
     ]
     
-    for label, val in const_items:
-        sheet.write(row, 1, label, label_fmt)
-        if isinstance(val, (int, float)):
-            sheet.merge_range(row, 2, row, 3, val, num_fmt)
-        else:
-            sheet.merge_range(row, 2, row, 3, val, center_fmt)
+    for label, val in mech_rows:
+        sheet.write(row, 1, label, fmt_label)
+        sheet.merge_range(row, 2, row, 3, val, fmt_data)
         row += 1
-
-    # --- 3. COST ESTIMATE ---
+        
+    # --- COST ---
     row += 1
-    sheet.merge_range(row, 1, row, 3, "3. PRELIMINARY COST ESTIMATE (Class 4)", section_header)
+    sheet.merge_range(row, 1, row, 3, "3. ESTIMATED COST (Class 4)", fmt_section)
     row += 1
     
     fin = res.get('financials', {})
-    
-    cost_items = [
-        ("Equipment Cost (FOB)", fin.get('equipment_fob', 0)),
-        ("Installation Labor", fin.get('installation', 0)),
-        ("Indirects & Eng.", fin.get('indirects', 0)),
-        ("TOTAL CAPEX (USD)", fin.get('total_capex', 0))
+    cost_rows = [
+        ("Equipment (FOB)", fin.get('equipment_fob', 0)),
+        ("Installation", fin.get('installation', 0)),
+        ("TOTAL CAPEX", fin.get('total_capex', 0))
     ]
     
-    for label, val in cost_items:
-        sheet.write(row, 1, label, label_fmt)
-        sheet.merge_range(row, 2, row, 3, val, workbook.add_format({'num_format': '$#,##0.00', 'border': 1, 'bg_color': '#E2EFDA'}))
+    for label, val in cost_rows:
+        sheet.write(row, 1, label, fmt_label)
+        sheet.merge_range(row, 2, row, 3, val, fmt_currency)
         row += 1
 
     # Footer
     row += 2
-    sheet.merge_range(row, 1, row, 3, "Generated by ExchangerPro | KAKAROTONCLOUD", workbook.add_format({'italic': True, 'align': 'center', 'font_color': '#808080'}))
+    sheet.merge_range(row, 1, row, 3, "Generated by ExchangerPro | KAKAROTONCLOUD", 
+                      workbook.add_format({'italic': True, 'align': 'center', 'color': 'gray'}))
 
     workbook.close()
     output.seek(0)
     return output
-
