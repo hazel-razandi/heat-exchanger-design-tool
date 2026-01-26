@@ -21,6 +21,6 @@ class FluidProperties:
         except:
             return 1000.0, 4180.0, 0.001, 0.6, 7.0 # Fallback (Water)
 
+# --- THIS FUNCTION MUST BE HERE ---
 def get_available_fluids():
     return list(FluidProperties.FLUID_MAP.keys())
-
