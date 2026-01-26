@@ -5,21 +5,21 @@ Heat Exchanger Design Tool - Main Streamlit Application
 import streamlit as st
 import numpy as np
 import plotly.graph_objects as go
-import json
 from datetime import datetime
 
-# Assuming these modules exist in your src folder as per your import statements
+# Import modules
 from src.calculations import HeatExchanger
 from src.fluid_properties import get_available_fluids, FluidProperties
 from src.hx_types import HeatExchangerType
 from src.utils import validate_temperatures, generate_temperature_profile
 from src.pressure_drop import PressureDropCalculator
 from src.cost_estimator import CostEstimator
-from src.pdf_generator import generate_text_report, create_downloadable_report
+from src.pdf_generator import generate_text_report
 from src.design_storage import DesignStorage, DESIGN_TEMPLATES, list_available_templates
 
 st.set_page_config(page_title="Heat Exchanger Design Tool", page_icon="🔥", layout="wide")
 
+# Initialize Session State
 if 'saved_designs' not in st.session_state:
     st.session_state.saved_designs = []
 if 'current_results' not in st.session_state:
@@ -35,6 +35,7 @@ st.markdown("""
 st.markdown('<div class="main-header">🔥❄️ Heat Exchanger Design Tool</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-header">Professional thermal design with advanced analysis</div>', unsafe_allow_html=True)
 
+# Sidebar Configuration
 with st.sidebar:
     st.title("⚙️ Configuration")
     
@@ -72,6 +73,7 @@ with st.sidebar:
         avg_u = (min_u + max_u) / 2
         st.success(f"Range: {min_u}-{max_u} W/(m²·K) | Avg: {avg_u:.0f}")
 
+# Main Interface Tabs
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["📝 Calculator", "📊 Results", "📄 Reports", "💾 Saved", "📚 Info"])
 
 with tab1:
@@ -82,6 +84,11 @@ with tab1:
     with col1:
         st.subheader("🔴 Hot Fluid")
         hot_fluid = st.selectbox("Fluid Type (Hot)", get_available_fluids(), key="hot_fluid")
+        
+        # Initialize variables to avoid scope errors
+        T_hot_in = 90.0
+        T_hot_out = 50.0
+        m_hot = 2.0
         
         if unit_system.startswith("Metric"):
             T_hot_in = st.number_input("Inlet Temp (°C)", value=90.0 if not template_data else template_data.get('T_hot_in', 90.0), step=1.0)
@@ -105,6 +112,11 @@ with tab1:
         st.subheader("🔵 Cold Fluid")
         cold_fluid = st.selectbox("Fluid Type (Cold)", get_available_fluids(), key="cold_fluid")
         
+        # Initialize variables
+        T_cold_in = 25.0
+        T_cold_out = 45.0
+        m_cold = 3.0
+
         if unit_system.startswith("Metric"):
             T_cold_in = st.number_input("Inlet Temp (°C)", value=25.0 if not template_data else template_data.get('T_cold_in', 25.0), step=1.0)
             if method == "LMTD (Design)":
@@ -160,43 +172,56 @@ with tab1:
 
     if calculate_button:
         try:
+            hx = HeatExchanger(flow_arrangement=flow_type)
+            
             if method == "LMTD (Design)":
                 is_valid, error_msg = validate_temperatures(T_hot_in, T_hot_out, T_cold_in, T_cold_out, flow_type)
                 if not is_valid:
                     st.error(f"❌ {error_msg}")
                     st.stop()
-                hx = HeatExchanger(flow_arrangement=flow_type)
                 results = hx.calculate_lmtd(T_hot_in, T_hot_out, T_cold_in, T_cold_out, m_hot, m_cold, hot_fluid, cold_fluid, U_value)
             else:
-                hx = HeatExchanger(flow_arrangement=flow_type)
                 results = hx.calculate_ntu(T_hot_in, T_cold_in, m_hot, m_cold, hot_fluid, cold_fluid, U_value, area)
             
+            # Enrich results
             results['hot_fluid'] = hot_fluid
             results['cold_fluid'] = cold_fluid
             results['hx_type'] = hx_type
             results['m_hot'] = m_hot
             results['m_cold'] = m_cold
             
-            if calculate_pressure_drop and hx_type == 'Shell-and-Tube':
+            # --- PRESSURE DROP CALCULATION ---
+            if calculate_pressure_drop and hx_type in ['Shell-and-Tube', 'Plate']:
                 try:
                     pd_calc = PressureDropCalculator(hx_type=hx_type)
-                    geometry = pd_calc.estimate_geometry_from_area(results['area'], hx_type)
+                    # Use the calculated area
+                    calc_area = results['area']
+                    
+                    geometry = pd_calc.estimate_geometry_from_area(calc_area, hx_type)
+                    
                     hot_props = FluidProperties(hot_fluid)
                     cold_props = FluidProperties(cold_fluid)
+                    
+                    # Avg temps for properties
                     T_hot_avg = (results['T_hot_in'] + results['T_hot_out']) / 2
                     T_cold_avg = (results['T_cold_in'] + results['T_cold_out']) / 2
                     
                     hot_dp = pd_calc.calculate_tube_side_pressure_drop(
                         m_hot, hot_props.get_density(T_hot_avg), hot_props.get_dynamic_viscosity(T_hot_avg),
-                        geometry['tube_diameter_inner'], geometry['tube_length'], geometry['n_tubes'], geometry['n_passes']
+                        geometry.get('tube_diameter_inner', 0.022), geometry.get('tube_length', 4.0), 
+                        geometry.get('n_tubes', 10), geometry.get('n_passes', 2)
                     )
+                    
+                    # Simplified assumption: cold fluid is shell side
                     cold_dp = pd_calc.calculate_shell_side_pressure_drop(
                         m_cold, cold_props.get_density(T_cold_avg), cold_props.get_dynamic_viscosity(T_cold_avg),
-                        geometry['shell_diameter'], geometry['tube_diameter_outer'], geometry['n_tubes'],
-                        geometry['baffle_spacing'], geometry['n_baffles']
+                        geometry.get('shell_diameter', 0.5), geometry.get('tube_diameter_outer', 0.025), 
+                        geometry.get('n_tubes', 10), geometry.get('baffle_spacing', 0.5), geometry.get('n_baffles', 8)
                     )
+                    
                     hot_pump = pd_calc.calculate_pumping_power(m_hot, hot_dp['pressure_drop_Pa'], hot_props.get_density(T_hot_avg))
                     cold_pump = pd_calc.calculate_pumping_power(m_cold, cold_dp['pressure_drop_Pa'], cold_props.get_density(T_cold_avg))
+                    
                     total_power = hot_pump['actual_power_kW'] + cold_pump['actual_power_kW']
                     annual = pd_calc.calculate_annual_pumping_cost(total_power)
                     
@@ -210,118 +235,142 @@ with tab1:
                             'annual_cost': annual['annual_cost_USD']
                         }
                     }
-                except:
-                    pass
-            
+                except Exception as e:
+                    st.warning(f"⚠️ Pressure drop calculation skipped: {str(e)}")
+
+            # --- COST ESTIMATION ---
             if estimate_costs:
                 try:
                     cost_est = CostEstimator()
                     eq_cost = cost_est.estimate_equipment_cost(results['area'], hx_type, 'Stainless Steel 304', 'Low')
-                    op_cost = cost_est.estimate_annual_operating_cost(results.get('pressure_drop', {}).get('pumping', {}).get('total_power_kW', 0))
+                    
+                    pump_power = results.get('pressure_drop', {}).get('pumping', {}).get('total_power_kW', 0)
+                    op_cost = cost_est.estimate_annual_operating_cost(pump_power)
                     ma_cost = cost_est.estimate_maintenance_cost(eq_cost['equipment_cost'], 'Standard')
-                    lc_cost = cost_est.calculate_lifecycle_cost(eq_cost['total_project_cost'], op_cost['annual_energy_cost'], ma_cost['annual_maintenance_total'])
+                    
+                    lc_cost = cost_est.calculate_lifecycle_cost(
+                        eq_cost['total_project_cost'], 
+                        op_cost['annual_energy_cost'], 
+                        ma_cost['annual_maintenance_total']
+                    )
                     
                     results['costs'] = {
                         'equipment': eq_cost,
-                        'operating': {'annual_energy_cost': op_cost['annual_energy_cost'], 'annual_maintenance_cost': ma_cost['annual_maintenance_total'], 'total_annual': op_cost['annual_energy_cost'] + ma_cost['annual_maintenance_total']},
+                        'operating': {
+                            'annual_energy_cost': op_cost['annual_energy_cost'], 
+                            'annual_maintenance_cost': ma_cost['annual_maintenance_total'], 
+                            'total_annual': op_cost['annual_energy_cost'] + ma_cost['annual_maintenance_total']
+                        },
                         'lifecycle': lc_cost
                     }
-                except:
-                    pass
+                except Exception as e:
+                    st.warning(f"⚠️ Cost estimation skipped: {str(e)}")
             
             st.session_state.current_results = results
-            st.success("✅ Calculation completed!")
-            st.balloons()
+            st.success("✅ Calculation complete!")
+            
         except Exception as e:
-            st.error(f"❌ Error: {str(e)}")
-    
+            st.error(f"❌ Calculation Error: {str(e)}")
+
     if clear_button:
         st.session_state.current_results = None
         st.rerun()
     
     if save_button and st.session_state.current_results:
-        name = st.text_input("Name", f"Design_{datetime.now().strftime('%Y%m%d_%H%M')}")
-        if st.button("Confirm"):
+        name = st.text_input("Name this design", f"Design_{datetime.now().strftime('%Y%m%d_%H%M')}")
+        if st.button("Confirm Save"):
             storage = DesignStorage()
             snap = storage.create_design_snapshot({'results': st.session_state.current_results}, name)
             st.session_state.saved_designs.append(snap)
             st.success(f"✅ Saved: {name}")
 
 with tab2:
-    st.header("Results")
+    st.header("Results Analysis")
     if st.session_state.current_results:
         r = st.session_state.current_results
         col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Heat", f"{r.get('Q', 0):.2f} kW")
-        col2.metric("Area", f"{r.get('area', 0):.2f} m²")
-        col3.metric("Eff", f"{r.get('effectiveness', 0)*100:.1f}%")
+        col1.metric("Heat Transfer", f"{r.get('Q', 0):.2f} kW")
+        col2.metric("Required Area", f"{r.get('area', 0):.2f} m²")
+        col3.metric("Effectiveness", f"{r.get('effectiveness', 0)*100:.1f}%")
         col4.metric("NTU", f"{r.get('NTU', 0):.2f}")
         
         st.subheader("📈 Temperature Profile")
-        x, Th, Tc = generate_temperature_profile(r['T_hot_in'], r['T_hot_out'], r['T_cold_in'], r['T_cold_out'], r['flow_type'])
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=x*100, y=Th, mode='lines', name='Hot', line=dict(color='red', width=3)))
-        fig.add_trace(go.Scatter(x=x*100, y=Tc, mode='lines', name='Cold', line=dict(color='blue', width=3)))
-        fig.update_layout(xaxis_title="Position (%)", yaxis_title="Temp (°C)", height=400)
-        st.plotly_chart(fig, use_container_width=True)
+        try:
+            x, Th, Tc = generate_temperature_profile(r['T_hot_in'], r['T_hot_out'], r['T_cold_in'], r['T_cold_out'], r['flow_type'])
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=x*100, y=Th, mode='lines', name='Hot Fluid', line=dict(color='red', width=3)))
+            fig.add_trace(go.Scatter(x=x*100, y=Tc, mode='lines', name='Cold Fluid', line=dict(color='blue', width=3)))
+            fig.update_layout(xaxis_title="Position along Heat Exchanger (%)", yaxis_title="Temperature (°C)", height=400)
+            st.plotly_chart(fig, use_container_width=True)
+        except Exception as e:
+            st.error("Could not generate graph.")
         
         col1, col2 = st.columns(2)
         with col1:
-            st.write(f"**Thermal:** Q={r['Q']:.2f} kW | Error={r.get('energy_balance_error', 0):.2f}%")
+            st.info(f"**Thermal Performance:**\n\nQ = {r['Q']:.2f} kW\n\nEnergy Balance Error = {r.get('energy_balance_error', 0):.2f}%")
         with col2:
-            st.write(f"**Design:** U={r['U_value']:.0f} | Area={r['area']:.2f} m²")
+            st.info(f"**Design Specs:**\n\nU-Value = {r['U_value']:.0f} W/m²K\n\nArea = {r['area']:.2f} m²")
         
         if 'pressure_drop' in r:
-            with st.expander("⚡ Pressure Drop"):
+            with st.expander("⚡ Pressure Drop & Pumping Details"):
                 pd = r['pressure_drop']
-                st.write(f"Hot: {pd['hot_side']['pressure_drop_kPa']:.2f} kPa | Cold: {pd['cold_side']['pressure_drop_kPa']:.2f} kPa")
-                st.write(f"Power: {pd['pumping']['total_power_kW']:.3f} kW | Cost: ${pd['pumping']['annual_cost']:.0f}/yr")
+                st.write(f"**Hot Side Pressure Drop:** {pd['hot_side']['pressure_drop_kPa']:.2f} kPa")
+                st.write(f"**Cold Side Pressure Drop:** {pd['cold_side']['pressure_drop_kPa']:.2f} kPa")
+                st.write(f"**Total Pumping Power:** {pd['pumping']['total_power_kW']:.3f} kW")
+                st.write(f"**Est. Annual Pumping Cost:** ${pd['pumping']['annual_cost']:.0f}/yr")
         
         if 'costs' in r:
-            with st.expander("💰 Costs"):
+            with st.expander("💰 Cost Estimation"):
                 c = r['costs']
-                st.write(f"Equipment: ${c['equipment']['total_project_cost']:,.0f}")
-                st.write(f"Annual: ${c['operating']['total_annual']:,.0f}/yr")
-                st.write(f"Lifecycle: ${c['lifecycle']['total_lifecycle_cost']:,.0f}")
+                st.write(f"**Capital Equipment Cost:** ${c['equipment']['total_project_cost']:,.0f}")
+                st.write(f"**Total Annual Operating Cost:** ${c['operating']['total_annual']:,.0f}/yr")
+                st.write(f"**20-Year Lifecycle Cost:** ${c['lifecycle']['total_lifecycle_cost']:,.0f}")
     else:
-        st.info("Run calculation first")
+        st.info("👈 Run a calculation in the 'Calculator' tab to see results here.")
 
 with tab3:
-    st.header("Reports")
+    st.header("Generate Reports")
     if st.session_state.current_results:
-        proj = {'project_name': st.text_input("Project", "HX Design"), 'engineer_name': '', 'company': '', 'location': '', 'date': datetime.now().strftime('%Y-%m-%d')}
-        report = generate_text_report(st.session_state.current_results, st.session_state.current_results.get('pressure_drop'), st.session_state.current_results.get('costs'), proj)
-        st.text_area("Preview", report, height=400)
-        st.download_button("📥 Download", report, f"{proj['project_name']}_Report.txt", "text/plain")
+        proj = {
+            'project_name': st.text_input("Project Name", "HX Design Project"),
+            'engineer_name': st.text_input("Engineer Name", ""),
+            'company': st.text_input("Company", ""),
+            'location': st.text_input("Location", ""), 
+            'date': datetime.now().strftime('%Y-%m-%d')
+        }
+        if st.button("Generate Text Report"):
+            report = generate_text_report(st.session_state.current_results, st.session_state.current_results.get('pressure_drop'), st.session_state.current_results.get('costs'), proj)
+            st.text_area("Report Preview", report, height=400)
+            st.download_button("📥 Download Report (.txt)", report, f"{proj['project_name']}_Report.txt", "text/plain")
     else:
-        st.info("Run calculation first")
+        st.info("Run a calculation first to generate a report.")
 
 with tab4:
     st.header("Saved Designs")
     if st.session_state.saved_designs:
         for i, d in enumerate(st.session_state.saved_designs):
-            with st.expander(f"{d['design_name']}"):
+            with st.expander(f"{d['design_name']} ({d['date_readable']})"):
                 r = d['data'].get('results', {})
-                st.write(f"Q={r.get('Q', 0):.2f} kW | A={r.get('area', 0):.2f} m²")
-                if st.button("Load", key=f"l{i}"):
+                st.write(f"Q={r.get('Q', 0):.2f} kW | Area={r.get('area', 0):.2f} m² | Eff={r.get('effectiveness', 0)*100:.1f}%")
+                if st.button(f"Load Design #{i+1}", key=f"load_{i}"):
                     st.session_state.current_results = r
                     st.rerun()
     else:
-        st.info("No saved designs")
+        st.info("No designs saved yet. Use the 'Save' button in the Calculator tab.")
 
 with tab5:
-    st.header("Information")
+    st.header("Information & Theory")
     st.markdown("""
-    ### LMTD Method
-    - All temps known → finds area
+    ### Methods Used
     
-    ### NTU Method  
-    - Area known → finds outlet temps
+    **1. LMTD Method (Design Mode):**
+    Used when inlet and outlet temperatures are known. Calculates the Log Mean Temperature Difference to determine the required surface area.
+    $$ Q = U \\times A \\times LMTD $$
     
-    ### Tips
-    - Counter flow is more efficient
-    - Energy balance error should be < 1%
+    **2. NTU Method (Rating Mode):**
+    Used when the heat exchanger Area (A) is known. Calculates the Number of Transfer Units (NTU) to predict effectiveness and outlet temperatures.
+    $$ NTU = \\frac{UA}{C_{min}} $$
+    
+    ### Fluid Properties
+    Thermophysical properties (Density, Specific Heat, Viscosity, Conductivity) are retrieved dynamically using **CoolProp**, an open-source database comparable to NIST Refprop.
     """)
-
-st.markdown("---")
-st.markdown("<div style='text-align:center;color:#666;'>Heat Exchanger Tool v2.0</div>", unsafe_allow_html=True)
