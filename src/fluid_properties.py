@@ -1,95 +1,95 @@
 """
-Fluid Properties Module
-Provides thermophysical properties for various fluids using CoolProp library.
-Robust error handling added by KAKAROTONCLOUD.
+Fluid Properties Engine
+Author: KAKAROTONCLOUD
+Version: 3.0.0 Enterprise
 """
 
 import CoolProp.CoolProp as CP
-import numpy as np
+from functools import lru_cache
 
 class FluidProperties:
     """
-    Class to retrieve thermophysical properties of fluids.
-    Includes safeguards against calculation errors.
+    High-performance fluid property engine with caching and failover.
     """
     
-    # Fluid mapping to CoolProp names
+    # Mapping friendly names to CoolProp internal codes
     FLUID_MAP = {
         'Water': 'Water',
         'Air': 'Air',
-        'Ethylene Glycol (20%)': 'INCOMP::MEG-20%',
-        'Ethylene Glycol (40%)': 'INCOMP::MEG-40%',
-        'Ethylene Glycol (60%)': 'INCOMP::MEG-60%',
+        'Sea Water': 'INCOMP::MAS',
+        'Ethylene Glycol (30%)': 'INCOMP::MEG-30%',
+        'Ethylene Glycol (50%)': 'INCOMP::MEG-50%',
+        'Propylene Glycol (30%)': 'INCOMP::MPG-30%',
         'Engine Oil': 'INCOMP::T66',
-        'R-134a': 'R134a'
+        'Lube Oil': 'INCOMP::DowJ',
+        'Ammonia': 'Ammonia',
+        'R-134a': 'R134a',
+        'R-410A': 'R410A'
     }
     
     def __init__(self, fluid_name):
-        self.fluid_name = fluid_name
-        # Default to Water if fluid not found (Safety feature)
-        self.coolprop_name = self.FLUID_MAP.get(fluid_name, 'Water')
-    
-    def _safe_prop_lookup(self, prop_code, temperature_c):
+        self.friendly_name = fluid_name
+        self.cp_code = self.FLUID_MAP.get(fluid_name, 'Water')
+
+    @lru_cache(maxsize=128)
+    def _get_prop_secure(self, prop_code, temp_c, pressure_pa=101325):
         """
-        Internal helper to safely lookup properties without crashing.
+        Internal protected method to fetch properties with caching.
         """
         try:
-            T_kelvin = temperature_c + 273.15
-            # Safety clamp: Ensure temp is positive Kelvin
-            if T_kelvin <= 0: T_kelvin = 298.15 
+            # Convert C to K (Absolute Temp)
+            tk = temp_c + 273.15
             
-            # Standard pressure: 1 atm (101325 Pa)
-            return CP.PropsSI(prop_code, 'T', T_kelvin, 'P', 101325, self.coolprop_name)
-        except:
-            # If CoolProp fails (e.g., out of range), return fallback
+            # Physics Safety: Prevent absolute zero or negative Kelvin
+            if tk <= 0.1: tk = 273.15
+            
+            # CoolProp Call
+            return CP.PropsSI(prop_code, 'T', tk, 'P', pressure_pa, self.cp_code)
+        except Exception:
             return None
 
-    def get_specific_heat(self, temperature):
-        val = self._safe_prop_lookup('C', temperature)
-        if val is None: return self._get_fallback_specific_heat()
-        return val
+    def get_density(self, temp_c):
+        """Returns Density (kg/m3)"""
+        val = self._get_prop_secure('D', temp_c)
+        return val if val else self._fallback('D')
 
-    def get_density(self, temperature):
-        val = self._safe_prop_lookup('D', temperature)
-        if val is None: return self._get_fallback_density()
-        return val
+    def get_specific_heat(self, temp_c):
+        """Returns Specific Heat Cp (J/kg-K)"""
+        val = self._get_prop_secure('C', temp_c)
+        return val if val else self._fallback('C')
 
-    def get_dynamic_viscosity(self, temperature):
-        val = self._safe_prop_lookup('V', temperature)
-        if val is None: return self._get_fallback_viscosity()
-        return val
+    def get_viscosity(self, temp_c):
+        """Returns Dynamic Viscosity (Pa-s)"""
+        val = self._get_prop_secure('V', temp_c)
+        return val if val else self._fallback('V')
 
-    def get_thermal_conductivity(self, temperature):
-        val = self._safe_prop_lookup('L', temperature)
-        if val is None: return self._get_fallback_conductivity()
-        return val
+    def get_conductivity(self, temp_c):
+        """Returns Thermal Conductivity (W/m-K)"""
+        val = self._get_prop_secure('L', temp_c)
+        return val if val else self._fallback('L')
 
-    # --- FALLBACK VALUES (To prevent app crashes) ---
-    def _get_fallback_specific_heat(self):
-        # Approximate J/kg-K
-        if 'Air' in self.fluid_name: return 1005
-        if 'Oil' in self.fluid_name: return 2000
-        if 'Glycol' in self.fluid_name: return 3500
-        return 4180 # Water default
+    def get_prandtl(self, temp_c):
+        """Returns Prandtl Number (Dimensionless)"""
+        cp = self.get_specific_heat(temp_c)
+        mu = self.get_viscosity(temp_c)
+        k = self.get_conductivity(temp_c)
+        return (cp * mu) / k if k > 0 else 1.0
 
-    def _get_fallback_density(self):
-        # Approximate kg/m3
-        if 'Air' in self.fluid_name: return 1.2
-        if 'Oil' in self.fluid_name: return 880
-        if 'Glycol' in self.fluid_name: return 1050
-        return 997 # Water default
+    def _fallback(self, prop_code):
+        """
+        Safety net: Returns approximate values if CoolProp fails.
+        Prevents 'Red Screen of Death' in the app.
+        """
+        is_gas = 'Air' in self.friendly_name
+        is_oil = 'Oil' in self.friendly_name
         
-    def _get_fallback_viscosity(self):
-        # Approximate Pa-s
-        if 'Air' in self.fluid_name: return 0.000018
-        if 'Oil' in self.fluid_name: return 0.05
-        return 0.00089 # Water default
-
-    def _get_fallback_conductivity(self):
-        # Approximate W/m-K
-        if 'Air' in self.fluid_name: return 0.026
-        if 'Oil' in self.fluid_name: return 0.145
-        return 0.6 # Water default
+        defaults = {
+            'D': 1.2 if is_gas else (880 if is_oil else 995),     # Density
+            'C': 1005 if is_gas else (2000 if is_oil else 4180),  # Cp
+            'V': 1.8e-5 if is_gas else (0.05 if is_oil else 0.001), # Viscosity
+            'L': 0.026 if is_gas else (0.15 if is_oil else 0.6)   # Conductivity
+        }
+        return defaults.get(prop_code, 1.0)
 
 def get_available_fluids():
     return list(FluidProperties.FLUID_MAP.keys())
