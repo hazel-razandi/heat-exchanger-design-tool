@@ -8,6 +8,7 @@ import plotly.graph_objects as go
 import json
 from datetime import datetime
 
+# Assuming these modules exist in your src folder as per your import statements
 from src.calculations import HeatExchanger
 from src.fluid_properties import get_available_fluids, FluidProperties
 from src.hx_types import HeatExchangerType
@@ -70,6 +71,7 @@ with st.sidebar:
         min_u, max_u = HeatExchangerType.get_typical_U_value(hx_type, fluid_combo)
         avg_u = (min_u + max_u) / 2
         st.success(f"Range: {min_u}-{max_u} W/(m²·K) | Avg: {avg_u:.0f}")
+
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["📝 Calculator", "📊 Results", "📄 Reports", "💾 Saved", "📚 Info"])
 
 with tab1:
@@ -155,7 +157,8 @@ with tab1:
         save_button = st.button("💾 Save", use_container_width=True)
     with col_c:
         clear_button = st.button("🗑️ Clear", use_container_width=True)
-if calculate_button:
+
+    if calculate_button:
         try:
             if method == "LMTD (Design)":
                 is_valid, error_msg = validate_temperatures(T_hot_in, T_hot_out, T_cold_in, T_cold_out, flow_type)
@@ -243,7 +246,8 @@ if calculate_button:
             snap = storage.create_design_snapshot({'results': st.session_state.current_results}, name)
             st.session_state.saved_designs.append(snap)
             st.success(f"✅ Saved: {name}")
-            with tab2:
+
+with tab2:
     st.header("Results")
     if st.session_state.current_results:
         r = st.session_state.current_results
