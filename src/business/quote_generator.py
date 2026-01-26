@@ -64,4 +64,3 @@ def create_pdf_quote(project_name, inputs, results, cost_est):
     pdf.multi_cell(0, 5, "Terms: Valid for 30 days. 50% Advance, 50% prior to dispatch. Lead time: 8-10 Weeks.")
     
     return pdf.output(dest='S').encode('latin-1')
-
