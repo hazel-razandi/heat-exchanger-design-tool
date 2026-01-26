@@ -1,22 +1,8 @@
-# Core Framework
 streamlit>=1.28.0
-
-# Numerical Computing
 numpy>=1.24.0
 scipy>=1.11.0
-
-# Data Handling
 pandas>=2.0.0
-
-# Plotting & Visualization
-matplotlib>=3.7.0
 plotly>=5.17.0
-
-# Thermophysical Properties
 CoolProp>=6.5.0
-
-# Testing
 pytest>=7.4.0
-
-# Additional utilities (if needed)
 python-dateutil>=2.8.2
