@@ -25,7 +25,6 @@ from src.cost_estimator import CostEstimator
 from src.pdf_generator import generate_text_report, create_downloadable_report
 from src.design_storage import DesignStorage, DESIGN_TEMPLATES, list_available_templates
 
-# Page configuration
 st.set_page_config(
     page_title="Heat Exchanger Design Tool",
     page_icon="🔥",
@@ -33,13 +32,11 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Initialize session state
 if 'saved_designs' not in st.session_state:
     st.session_state.saved_designs = []
 if 'current_results' not in st.session_state:
     st.session_state.current_results = None
 
-# Custom CSS
 st.markdown("""
 <style>
     .main-header {
@@ -68,11 +65,9 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Header
 st.markdown('<div class="main-header">🔥❄️ Heat Exchanger Design Tool</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-header">Professional thermal design with advanced analysis</div>', unsafe_allow_html=True)
 
-# Feature badges
 st.markdown("""
 <div style="text-align: center; margin-bottom: 2rem;">
     <span class="feature-badge">⚡ Pressure Drop</span>
@@ -83,17 +78,14 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Sidebar
 with st.sidebar:
     st.title("⚙️ Configuration")
     
-    # Design Templates
     st.subheader("📋 Quick Start Templates")
     templates = list_available_templates()
     template_options = ['Custom Design'] + [t['name'] for t in templates]
     selected_template = st.selectbox("Load Template", template_options)
     
-    # Load template if selected
     template_data = None
     if selected_template != 'Custom Design':
         for t in templates:
@@ -105,32 +97,27 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # Flow arrangement
     flow_type = st.selectbox(
         "Flow Arrangement",
         ["Counter Flow", "Parallel Flow"],
         help="Counter flow is more efficient"
     )
     
-    # Calculation method
     method = st.radio(
         "Calculation Method",
         ["LMTD (Design)", "NTU (Rating)"],
         help="LMTD: Calculate required area | NTU: Analyze existing HX"
     )
     
-    # Unit system
     unit_system = st.selectbox(
         "Unit System",
         ["Metric (°C, kW, m²)", "Imperial (°F, BTU/hr, ft²)"]
     )
     
-    # Fouling factors toggle
     st.markdown("---")
     st.subheader("🧼 Fouling Factors")
     include_fouling = st.checkbox("Include fouling resistance", value=False)
     
-    # Advanced options
     st.markdown("---")
     st.subheader("🔧 Advanced Options")
     calculate_pressure_drop = st.checkbox("Calculate pressure drop", value=True)
@@ -138,7 +125,6 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # Heat exchanger type selector
     st.subheader("📊 HX Type Reference")
     hx_type = st.selectbox(
         "Heat Exchanger Type",
@@ -153,9 +139,8 @@ with st.sidebar:
     if st.button("Get Typical U-value"):
         min_u, max_u = HeatExchangerType.get_typical_U_value(hx_type, fluid_combo)
         avg_u = (min_u + max_u) / 2
-        st.success(f"**Typical U-value Range:**\n\n{min_u} - {max_u} W/(m²·K)\n\n**Average:** {avg_u:.0f} W/(m²·K)")￼Enter
-        # Main content area
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["📝 Design Calculator", "📊 Results & Analysis", "📄 Reports", "💾 Saved Designs", "📚 Information"])
+        st.success(f"Typical U-value: {min_u} - {max_u} W/(m²·K) | Average: {avg_u:.0f} W/(m²·K)")
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(["📝 Design Calculator", "📊 Results & Analysis", "📄 Reports", "💾 Saved Designs", "📚 Information"])
 
 with tab1:
     st.header("Heat Exchanger Design Input")
@@ -228,7 +213,6 @@ with tab1:
     
     st.markdown("---")
     
-    # Heat exchanger parameters
     st.subheader("🔧 Heat Exchanger Parameters")
     
     col3, col4, col5 = st.columns(3)
@@ -290,7 +274,8 @@ with tab1:
                 help="Typical: 0.0002-0.0009"
             )
             U_value = 1 / (1/U_value_clean + fouling_hot + fouling_cold)
-            st.info(f"**Fouled U-value:** {U_value:.1f} W/(m²·K)\n\n**Degradation:** {((U_value_clean - U_value)/U_value_clean * 100):.1f}%")
+            degradation = ((U_value_clean - U_value)/U_value_clean * 100)
+            st.info(f"Fouled U-value: {U_value:.1f} W/(m²·K) | Degradation: {degradation:.1f}%")
         else:
             U_value = U_value_clean
     
@@ -303,8 +288,7 @@ with tab1:
         save_design_button = st.button("💾 Save Design", use_container_width=True)
     with col_calc3:
         clear_button = st.button("🗑️ Clear", use_container_width=True)
-        # CALCULATION LOGIC
-    if calculate_button:
+        if calculate_button:
         try:
             if method == "LMTD (Design)":
                 is_valid, error_msg = validate_temperatures(T_hot_in, T_hot_out, T_cold_in, T_cold_out, flow_type)
