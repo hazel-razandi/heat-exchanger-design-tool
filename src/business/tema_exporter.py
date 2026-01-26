@@ -1,3 +1,6 @@
+"""
+Professional TEMA Datasheet Generator
+"""
 import io
 import xlsxwriter
 from datetime import datetime
@@ -7,59 +10,116 @@ def generate_tema_sheet(project_name, inputs, results):
     workbook = xlsxwriter.Workbook(output, {'in_memory': True})
     sheet = workbook.add_worksheet("TEMA Specification")
 
-    # Styles
-    header_fmt = workbook.add_format({'bold': True, 'bg_color': '#D9E1F2', 'border': 1})
-    data_fmt = workbook.add_format({'border': 1})
-    num_fmt = workbook.add_format({'border': 1, 'num_format': '0.00'})
+    # --- FORMATTING STYLES ---
+    # Main Header
+    fmt_title = workbook.add_format({
+        'bold': True, 'font_size': 14, 'align': 'center', 'valign': 'vcenter',
+        'border': 2, 'bg_color': '#EFEFEF'
+    })
+    # Section Header (Process/Mechanical)
+    fmt_header = workbook.add_format({
+        'bold': True, 'font_size': 11, 'align': 'center', 'valign': 'vcenter',
+        'border': 1, 'bg_color': '#D9E1F2', 'text_wrap': True
+    })
+    # Data Labels (Left Aligned)
+    fmt_label = workbook.add_format({
+        'bold': True, 'font_size': 10, 'align': 'left', 'valign': 'vcenter',
+        'border': 1, 'bg_color': '#FFFFFF'
+    })
+    # Data Values (Center Aligned)
+    fmt_data = workbook.add_format({
+        'font_size': 10, 'align': 'center', 'valign': 'vcenter',
+        'border': 1
+    })
+    # Numbers (2 decimals)
+    fmt_num = workbook.add_format({
+        'font_size': 10, 'align': 'center', 'valign': 'vcenter',
+        'border': 1, 'num_format': '0.00'
+    })
 
-    # 1. Header Info
-    sheet.merge_range('A1:E1', f"HEAT EXCHANGER SPECIFICATION SHEET - {project_name}", header_fmt)
-    sheet.write('A2', f"Date: {datetime.now().strftime('%Y-%m-%d')}", data_fmt)
+    # --- LAYOUT SETUP ---
+    # Set proper column widths (Industry Standard)
+    sheet.set_column('A:A', 30) # Parameter Name
+    sheet.set_column('B:B', 20) # Shell Side Data
+    sheet.set_column('C:C', 20) # Tube Side Data
+    sheet.set_row(0, 30) # Title Row Height
+
+    # --- 1. TITLE BLOCK ---
+    sheet.merge_range('A1:C1', f"HEAT EXCHANGER SPECIFICATION SHEET - {project_name.upper()}", fmt_title)
+    sheet.merge_range('A2:C2', f"Date: {datetime.now().strftime('%Y-%m-%d')} | Doc Ref: EX-AI-{datetime.now().strftime('%H%M')}", fmt_data)
     
-    # 2. Process Conditions Table
-    sheet.write('A4', "PERFORMANCE DATA", header_fmt)
-    headers = ["Parameter", "Shell Side", "Tube Side"]
-    for col, h in enumerate(headers):
-        sheet.write(4, col, h, header_fmt)
-        
-    data = [
-        ("Fluid", inputs['cold_fluid'], inputs['hot_fluid']),
-        ("Flow Rate (kg/s)", inputs['m_cold'], inputs['m_hot']),
-        ("Temperature In (°C)", inputs['T_cold_in'], inputs['T_hot_in']),
-        ("Temperature Out (°C)", results['T_cold_out'], results['T_hot_out']),
-        ("Velocity (m/s)", results['v_shell'], results['v_tube'])
+    # --- 2. PROCESS PERFORMANCE SECTION ---
+    sheet.merge_range('A4:C4', "1. PERFORMANCE DATA", fmt_header)
+    
+    # Sub-headers
+    sheet.write('A5', "PARAMETER", fmt_header)
+    sheet.write('B5', "SHELL SIDE (Cold)", fmt_header)
+    sheet.write('C5', "TUBE SIDE (Hot)", fmt_header)
+    
+    process_data = [
+        ("Fluid Name", inputs['cold_fluid'], inputs['hot_fluid']),
+        ("Mass Flow Rate (kg/s)", inputs['m_cold'], inputs['m_hot']),
+        ("Inlet Temperature (°C)", inputs['T_cold_in'], inputs['T_hot_in']),
+        ("Outlet Temperature (°C)", results['T_cold_out'], results['T_hot_out']),
+        ("Operating Pressure (bar)", "10.0 (est)", "10.0 (est)"),
+        ("Velocity (m/s)", results['v_shell'], results['v_tube']),
+        ("Fouling Factor (m²K/W)", "0.0002", "0.0002")
     ]
     
     row = 5
-    for label, shell_val, tube_val in data:
-        sheet.write(row, 0, label, data_fmt)
-        # Handle mixed types (strings vs numbers)
-        fmt_s = num_fmt if isinstance(shell_val, (int, float)) else data_fmt
-        fmt_t = num_fmt if isinstance(tube_val, (int, float)) else data_fmt
+    for label, shell_v, tube_v in process_data:
+        sheet.write(row, 0, label, fmt_label)
         
-        sheet.write(row, 1, shell_val, fmt_s)
-        sheet.write(row, 2, tube_val, fmt_t)
+        # Check if number or string for formatting
+        s_fmt = fmt_num if isinstance(shell_v, (int, float)) else fmt_data
+        t_fmt = fmt_num if isinstance(tube_v, (int, float)) else fmt_data
+        
+        sheet.write(row, 1, shell_v, s_fmt)
+        sheet.write(row, 2, tube_v, t_fmt)
         row += 1
-        
-    # 3. Mechanical Data
-    row += 2
-    sheet.write(row, 0, "CONSTRUCTION DETAILS", header_fmt)
-    mech_data = [
-        ("Shell Diameter", f"{inputs['shell_id']} m"),
-        ("Tube Length", f"{inputs['length']} m"),
-        ("Tube Count", inputs['n_tubes']),
-        ("Tube OD", "19.05 mm"),
-        ("Baffle Spacing", f"{inputs['baffle_spacing']} m"),
-        ("Material", "Carbon Steel") 
+
+    # Calculated Performance Block
+    row += 1
+    sheet.merge_range(f'A{row+1}:C{row+1}', "CALCULATED DUTY", fmt_header)
+    row += 1
+    
+    kpis = [
+        ("Total Heat Duty (kW)", results['Q']/1000),
+        ("Effective Area (m²)", results['Area']),
+        ("Overall U (W/m²K)", results['U']),
+        ("LMTD (°C)", results.get('LMTD', 0))
     ]
     
-    row += 1
-    for label, val in mech_data:
-        sheet.write(row, 0, label, data_fmt)
-        sheet.write(row, 1, val, data_fmt)
+    for label, val in kpis:
+        sheet.write(row, 0, label, fmt_label)
+        sheet.merge_range(f'B{row+1}:C{row+1}', val, fmt_num)
         row += 1
+
+    # --- 3. MECHANICAL CONSTRUCTION ---
+    row += 2
+    sheet.merge_range(f'A{row+1}:C{row+1}', "2. CONSTRUCTION DETAILS", fmt_header)
+    row += 1
+    
+    mech_data = [
+        ("Shell Diameter (m)", inputs['shell_id']),
+        ("Tube Length (m)", inputs['length']),
+        ("Tube Count", inputs['n_tubes']),
+        ("Tube OD (mm)", "19.05"),
+        ("Pitch Ratio", "1.25"),
+        ("Baffle Spacing (m)", inputs['baffle_spacing']),
+        ("Baffle Cut (%)", "25%"),
+        ("TEMA Type", "BEM (Fixed Tubesheet)")
+    ]
+    
+    for label, val in mech_data:
+        sheet.write(row, 0, label, fmt_label)
+        sheet.merge_range(f'B{row+1}:C{row+1}', val, fmt_data)
+        row += 1
+        
+    # Footer
+    row += 2
+    sheet.merge_range(f'A{row+1}:C{row+1}', "Generated by ExchangerAI Enterprise v6.0 | Not for Fabrication without PE Seal", fmt_data)
 
     workbook.close()
     output.seek(0)
     return output
-
