@@ -15,7 +15,7 @@ from src.utils import validate_temperatures, generate_temperature_profile
 from src.pressure_drop import PressureDropCalculator
 from src.cost_estimator import CostEstimator
 from src.pdf_generator import generate_text_report
-from src.design_storage import DesignStorage, DESIGN_TEMPLATES
+from src.design_storage import DesignStorage
 
 # Page Config
 st.set_page_config(page_title="HX Design by KAKAROTONCLOUD", page_icon="🔥", layout="wide")
@@ -35,6 +35,7 @@ with st.sidebar:
     hx_type = st.selectbox("HX Type", HeatExchangerType.list_all_types())
     
     st.markdown("---")
+    # Default to False for now to prevent confusion if files aren't synced
     st.checkbox("Calculate Pressure Drop", key="calc_dp", value=True)
     st.checkbox("Estimate Costs", key="calc_cost", value=True)
 
@@ -100,7 +101,9 @@ with tab1:
             if st.session_state.calc_dp:
                 pd = PressureDropCalculator(hx_type)
                 geo = pd.estimate_geometry_from_area(res['area'], hx_type)
-                res['dp_hot'] = pd.calculate_tube_side_pressure_drop(mh, 997, 0.001, 0.025, 4, 10)
+                
+                # FIXED: Added '2' (passes) as the last argument to prevent "missing argument" error
+                res['dp_hot'] = pd.calculate_tube_side_pressure_drop(mh, 997, 0.001, 0.025, 4, 10, 2)
                 res['pump_hot'] = pd.calculate_pumping_power(mh, res['dp_hot']['pressure_drop_kPa']*1000, 997)
 
             if st.session_state.calc_cost:
