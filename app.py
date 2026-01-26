@@ -14,7 +14,6 @@ from src.utils import validate_temperatures, generate_temperature_profile
 from src.pressure_drop import PressureDropCalculator
 from src.cost_estimator import CostEstimator
 from src.pdf_generator import generate_text_report
-# NEW IMPORT
 from src.excel_exporter import generate_excel_datasheet
 
 # --- PAGE CONFIGURATION ---
@@ -178,66 +177,3 @@ if st.session_state.results:
                     file_name=f"{pname}_Datasheet.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
-                res = hx.calculate_ntu(h_tin, c_tin, h_flow, c_flow, h_fluid, c_fluid, u_val, area_val)
-            
-            # 2. HYDRAULICS (Tube Side)
-            pd = PressureDropCalculator(hx_config)
-            # Standard 3/4" tube, 2 passes
-            tube_data = pd.estimate_geometry_from_area(res.get('area', 10), hx_config)
-            res['hydraulics'] = pd.calculate_tube_side_pressure_drop(
-                h_flow, 990, 0.0008, 0.019, 6.0, tube_data['n_tubes'], 2
-            )
-            
-            # 3. FINANCIALS
-            ce = CostEstimator()
-            res['financials'] = ce.estimate_project_budget(res.get('area', 10), hx_config, material)
-            res['meta'] = {'material': material, 'fouling': fouling_factor, 'config': hx_config}
-            
-            st.session_state.results = res
-            st.success("Simulation Complete")
-            
-        except Exception as e:
-            st.error(f"Simulation Error: {str(e)}")
-
-# --- RESULTS ---
-if st.session_state.results:
-    res = st.session_state.results
-    
-    st.divider()
-    k1, k2, k3, k4 = st.columns(4)
-    k1.metric("Thermal Duty", f"{res['Q']:.1f} kW")
-    k2.metric("Surface Area", f"{res['area']:.1f} m²")
-    k3.metric("LMTD", f"{res['LMTD']:.1f} °C")
-    k4.metric("Est. Cost", f"${res['financials']['total_capex']:,.0f}")
-
-    t1, t2, t3 = st.tabs(["📈 Performance", "⚙️ Mechanical", "📄 Report"])
-    
-    with t1:
-        x, th, tc = generate_temperature_profile(res['T_hot_in'], res['T_hot_out'], res['T_cold_in'], res['T_cold_out'], flow_arr)
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=x*100, y=th, name='Hot Stream', line=dict(color='#FF4B4B')))
-        fig.add_trace(go.Scatter(x=x*100, y=tc, name='Cold Stream', line=dict(color='#0068C9')))
-        fig.update_layout(title="Temperature Profile", xaxis_title="Length %", yaxis_title="Temp °C", height=400)
-        st.plotly_chart(fig, use_container_width=True)
-
-    with t2:
-        hyd = res['hydraulics']
-        c1, c2 = st.columns(2)
-        with c1:
-            st.markdown("**Hydraulics**")
-            st.write(f"Velocity: {hyd['velocity_m_s']:.2f} m/s")
-            st.write(f"Pressure Drop: {hyd['pressure_drop_kPa']:.2f} kPa")
-            if hyd['alerts']:
-                for a in hyd['alerts']: st.warning(a)
-        with c2:
-            st.markdown("**Cost Breakdown**")
-            fin = res['financials']
-            st.write(f"Equipment: ${fin['equipment_fob']:,.2f}")
-            st.write(f"Installation: ${fin['installation']:,.2f}")
-            st.write(f"Indirects: ${fin['indirects']:,.2f}")
-
-    with t3:
-        pname = st.text_input("Project Reference", "HX-Project-001")
-        if st.button("Generate Spec Sheet"):
-            rep = generate_text_report(res, res.get('hydraulics'), res.get('financials'), res['meta'], {'project_name': pname})
-            st.download_button("Download Spec (.txt)", rep, f"{pname}.txt")
