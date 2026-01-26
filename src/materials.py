@@ -2,9 +2,9 @@
 Material Database (V4.0 Physics)
 """
 class MaterialDB:
-    # k: Thermal Conductivity (W/m-K) -> Crucial for Wall Resistance
-    # rho: Density (kg/m3) -> Crucial for Weight/Cost
-    # cost: Multiplier vs Carbon Steel
+    # k: Thermal Conductivity (W/m-K)
+    # rho: Density (kg/m3)
+    # cost: Cost Multiplier vs Carbon Steel
     DATA = {
         'Carbon Steel (A516)':      {'k': 54.0, 'rho': 7850, 'cost': 1.0,  'max_t': 500},
         'Stainless Steel 304':      {'k': 16.2, 'rho': 7900, 'cost': 2.8,  'max_t': 800},
@@ -21,4 +21,3 @@ class MaterialDB:
     @staticmethod
     def get_names():
         return list(MaterialDB.DATA.keys())
-￼Enter
