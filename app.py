@@ -372,7 +372,7 @@ with tab1:
                             }
                         }
                 except Exception as e:
-                    st.warning(f"⚠️ Pressure drop calculation failed: {e}")
+                    st.warning(f"⚠️ Pressure drop calculation: {str(e)}")
             
             if estimate_costs:
                 try:
@@ -409,7 +409,7 @@ with tab1:
                         'lifecycle': lifecycle_cost
                     }
                 except Exception as e:
-                    st.warning(f"⚠️ Cost estimation failed: {e}")
+                    st.warning(f"⚠️ Cost estimation: {str(e)}")
             
             st.session_state.current_results = results
             st.success("✅ Calculation completed successfully!")
@@ -431,7 +431,8 @@ with tab1:
             )
             st.session_state.saved_designs.append(snapshot)
             st.success(f"✅ Saved: {design_name}")
-            with tab2:
+            
+with tab2:
     st.header("Results & Advanced Analysis")
     
     if st.session_state.current_results:
