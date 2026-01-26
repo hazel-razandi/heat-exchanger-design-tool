@@ -1,46 +1,65 @@
 """
-Advanced Cost Estimator (Class 4)
+AACE Class 4 Cost Estimator
 Author: KAKAROTONCLOUD
+Version: 3.0.0 Enterprise
 """
 from src.hx_types import EngineeringDB
 
 class CostEstimator:
-    def estimate_project_budget(self, area, hx_type, material_name):
-        """
-        Generates a Class 4 estimate (-30% / +50%)
-        """
-        # 1. Base Cost (Carbon Steel Reference)
-        # Empirical correlation: Cost = a * Area^b
-        base_cost = 12000 * (area ** 0.65) # Approximation for shell & tube
+    """
+    Generates preliminary capital cost estimates (+/- 30% accuracy).
+    Based on AACE International standards for process equipment.
+    """
+    
+    def estimate_project_budget(self, area, hx_config, material_name):
+        # 1. Base Equipment Cost (Carbon Steel Reference)
+        # Using a power-law sizing model: Cost = Base * (Area)^0.65
+        # Calibrated to 2024 Market Rates (approx $12,000 for a small unit)
+        if area < 1: area = 1.0
+        base_fob = 12500 * (area ** 0.65)
         
-        # 2. Material Correction
-        mat_data = EngineeringDB.MATERIALS.get(material_name, {'cost_factor': 1.0})
-        mat_factor = mat_data['cost_factor']
+        # 2. Material Multiplier
+        mat_data = EngineeringDB.get_properties(material_name)
+        mat_factor = mat_data.get('cost_factor', 1.0)
         
-        # 3. Type Correction
+        # 3. Pressure/Type Multiplier
         type_factor = 1.0
-        if "Plate" in hx_type: type_factor = 0.7 # Plates are cheaper
-        if "Air" in hx_type: type_factor = 1.2
+        if "Plate" in hx_config: type_factor = 0.75 # Plates typically cheaper per m2
+        if "Double Pipe" in hx_config: type_factor = 1.4 # Heavy wall thickness
         
-        # Equipment Cost (F.O.B)
-        equipment_cost = base_cost * mat_factor * type_factor
+        # Calculate Equipment FOB (Free on Board)
+        equipment_cost = base_fob * mat_factor * type_factor
         
-        # 4. Lang Factors (Total Installed Cost)
-        # Factor 3.0 is typical for fluid processing plants
-        installation = equipment_cost * 0.50
-        piping = equipment_cost * 0.40
-        instrumentation = equipment_cost * 0.20
-        electrical = equipment_cost * 0.10
-        engineering = equipment_cost * 0.25
-        contingency = equipment_cost * 0.25
+        # 4. Lang Factors (Total Installed Cost Breakdown)
+        # Standard factors for fluid processing plants
+        installation_labor = equipment_cost * 0.45
+        piping_valves      = equipment_cost * 0.35
+        electrical_instr   = equipment_cost * 0.15
+        engineering_admin  = equipment_cost * 0.25
+        contingency        = equipment_cost * 0.20 # Risk buffer
         
-        total_capex = equipment_cost + installation + piping + instrumentation + electrical + engineering + contingency
+        total_capex = (equipment_cost + installation_labor + 
+                      piping_valves + electrical_instr + 
+                      engineering_admin + contingency)
 
         return {
             'equipment_fob': equipment_cost,
-            'installation_labor': installation,
-            'bulk_materials': piping + instrumentation + electrical,
-            'indirects': engineering + contingency,
+            'installation': installation_labor,
+            'piping': piping_valves,
+            'electrical': electrical_instr,
+            'indirects': engineering_admin,
+            'contingency': contingency,
             'total_capex': total_capex,
-            'class': 'AACE Class 4 (Preliminary)'
+            'currency': 'USD'
+        }
+
+    def estimate_opex(self, pump_power_kW, hours_per_year=8000, energy_cost_kwh=0.12):
+        """
+        Annual Operating Expenditure (OPEX)
+        """
+        energy_cost = pump_power_kW * hours_per_year * energy_cost_kwh
+        # Maintenance typically 3% of CAPEX annually
+        return {
+            'energy_annual': energy_cost,
+            'maintenance_annual': 0 # Calculated in main app usually
         }
