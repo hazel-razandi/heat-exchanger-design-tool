@@ -2,8 +2,20 @@ import streamlit as st
 from src.core.solver import SegmentalSolver
 from src.core.properties import get_available_fluids
 from src.data.materials import MaterialDB
+# Import the new Safety Engines
+from src.mechanical.vibration import VibrationCheck
+from src.mechanical.api_660 import API660Validator
 
 st.set_page_config(page_title="ExchangerAI Enterprise", layout="wide", page_icon="🏭")
+
+# --- CSS FOR PROFESSIONAL LOOK ---
+st.markdown("""
+<style>
+    .success-box {padding:15px; background-color:#d4edda; color:#155724; border-radius:5px; margin-bottom:10px;}
+    .warning-box {padding:15px; background-color:#fff3cd; color:#856404; border-radius:5px; margin-bottom:10px;}
+    .error-box {padding:15px; background-color:#f8d7da; color:#721c24; border-radius:5px; margin-bottom:10px;}
+</style>
+""", unsafe_allow_html=True)
 
 st.sidebar.header("⚙️ Design Parameters")
 
@@ -40,14 +52,35 @@ if st.button("🚀 Run Analysis", type="primary"):
     
     solver = SegmentalSolver()
     try:
+        # 1. Run Physics
         res = solver.run(inputs)
         
+        # 2. Run Safety Checks (The New Layer)
+        vib = VibrationCheck(inputs, res).run_check()
+        hyd = API660Validator(inputs, res).check_rho_v2()
+        
+        # --- DISPLAY RESULTS ---
         st.divider()
         k1, k2, k3 = st.columns(3)
         k1.metric("Heat Duty", f"{res['Q']/1000:.1f} kW")
         k2.metric("Overall U", f"{res['U']:.1f} W/m²K")
         k3.metric("Area Required", f"{res['Area']:.1f} m²")
         
-        st.success("✅ Analysis Complete - Physics Engine Validated")
+        # Safety Dashboard
+        st.subheader("🛡️ Mechanical Safety Shield")
+        
+        # Vibration Status
+        if vib['status'] == "PASS":
+            st.markdown(f'<div class="success-box">{vib["msg"]}</div>', unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div class="error-box">{vib["msg"]}</div>', unsafe_allow_html=True)
+
+        # Hydraulic Status
+        if hyd['status'] == "PASS":
+             st.markdown(f'<div class="success-box">{hyd["msg"]}</div>', unsafe_allow_html=True)
+        else:
+            for item in hyd['items']:
+                st.markdown(f'<div class="warning-box">{item}</div>', unsafe_allow_html=True)
+        
     except Exception as e:
         st.error(f"Solver Error: {str(e)}")
