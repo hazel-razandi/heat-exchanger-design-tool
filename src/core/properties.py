@@ -1,26 +1,66 @@
-import CoolProp.CoolProp as CP
-from functools import lru_cache
+"""
+Physical Properties Database for Heat Exchanger Fluids
+Includes Water and Standard API Oils (Kern).
+"""
 
-class FluidProperties:
-    FLUID_MAP = {'Water': 'Water', 'Air': 'Air', 'Engine Oil': 'INCOMP::T66', 'Ethanol': 'Ethanol'}
-    
-    def __init__(self, name):
-        self.code = self.FLUID_MAP.get(name, 'Water')
-
-    @lru_cache(maxsize=128)
-    def get_props(self, temp_c, pressure_pa=101325):
-        """Returns (rho, cp, mu, k, pr) at given Temp (C)"""
-        t_k = temp_c + 273.15
-        try:
-            rho = CP.PropsSI('D', 'T', t_k, 'P', pressure_pa, self.code)
-            cp = CP.PropsSI('C', 'T', t_k, 'P', pressure_pa, self.code)
-            mu = CP.PropsSI('V', 'T', t_k, 'P', pressure_pa, self.code)
-            k = CP.PropsSI('L', 'T', t_k, 'P', pressure_pa, self.code)
-            pr = CP.PropsSI('Prandtl', 'T', t_k, 'P', pressure_pa, self.code)
-            return rho, cp, mu, k, pr
-        except:
-            return 1000.0, 4180.0, 0.001, 0.6, 7.0 # Fallback (Water)
-
-# --- THIS FUNCTION MUST BE HERE ---
 def get_available_fluids():
-    return list(FluidProperties.FLUID_MAP.keys())
+    """Returns list of fluids for UI dropdowns."""
+    return ["Water", "Oil_35API", "Oil_Heavy", "Methanol", "Benzene"]
+
+def get_fluid_properties(fluid_name, T_C):
+    """
+    Returns dictionary of properties at Temperature T (Celsius).
+    Units:
+    - rho: kg/m3
+    - cp:  J/kgK
+    - k:   W/mK
+    - mu:  Pa.s
+    """
+    # Convert T to Kelvin for standard correlations if needed
+    T_K = T_C + 273.15
+    
+    # Defaults (Water at 25C)
+    props = {
+        'rho': 997.0,
+        'cp': 4180.0,
+        'k': 0.60,
+        'mu': 0.00089
+    }
+    
+    if fluid_name == "Water":
+        # Simple linearized regression for water (valid 10-100C)
+        props['rho'] = 1000 - 0.0178 * (T_C - 4)**1.7
+        props['cp'] = 4180.0
+        props['k'] = 0.6 + 0.001 * T_C
+        # Viscosity fit
+        props['mu'] = 2.414e-5 * 10**(247.8/(T_K - 140))
+
+    elif fluid_name == "Oil_35API":
+        # Data for Kern Ex 11.1 (Raw Oil)
+        # 35 API ~ 0.85 SG
+        # Linear fits based on Kern's Appendix for 35 API Oil
+        props['rho'] = 850 - 0.65 * T_C  # Density decreases with temp
+        props['cp'] = 2000 + 3.5 * T_C   # Cp increases with temp
+        props['k'] = 0.13 - 0.0001 * T_C # k decreases slightly
+        
+        # Viscosity (Critical for pressure drop & heat transfer)
+        # Using a log-linear fit typical for light crude
+        # At 40C ~ 3 cP, At 100C ~ 0.8 cP
+        if T_C < 0: T_C = 0.1
+        # Walas correlation style for hydrocarbons
+        props['mu'] = np_exp_viscosity(T_C) 
+
+    elif fluid_name == "Oil_Heavy":
+        props['rho'] = 920 - 0.6 * T_C
+        props['cp'] = 1900 + 3.0 * T_C
+        props['k'] = 0.12
+        props['mu'] = 0.1 * (100/(T_C+20))**2 # Very viscous
+
+    return props
+
+def np_exp_viscosity(T_C):
+    """Helper for Oil viscosity to avoid numpy import issues if not needed"""
+    import numpy as np
+    # Fit for 35 API Oil: approx 2.6 cP at 40C, 0.9 cP at 90C
+    # Viscosity in Pa.s
+    return 0.0026 * np.exp(-0.025 * (T_C - 40))
