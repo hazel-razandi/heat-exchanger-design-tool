@@ -2,6 +2,7 @@
 Physical Properties Database for Heat Exchanger Fluids
 Includes Water and Standard API Oils (Kern).
 """
+import numpy as np
 
 def get_available_fluids():
     """Returns list of fluids for UI dropdowns."""
@@ -44,10 +45,7 @@ def get_fluid_properties(fluid_name, T_C):
         props['k'] = 0.13 - 0.0001 * T_C # k decreases slightly
         
         # Viscosity (Critical for pressure drop & heat transfer)
-        # Using a log-linear fit typical for light crude
-        # At 40C ~ 3 cP, At 100C ~ 0.8 cP
         if T_C < 0: T_C = 0.1
-        # Walas correlation style for hydrocarbons
         props['mu'] = np_exp_viscosity(T_C) 
 
     elif fluid_name == "Oil_Heavy":
@@ -59,8 +57,9 @@ def get_fluid_properties(fluid_name, T_C):
     return props
 
 def np_exp_viscosity(T_C):
-    """Helper for Oil viscosity to avoid numpy import issues if not needed"""
-    import numpy as np
-    # Fit for 35 API Oil: approx 2.6 cP at 40C, 0.9 cP at 90C
-    # Viscosity in Pa.s
-    return 0.0026 * np.exp(-0.025 * (T_C - 40))
+    """
+    Calibrated Viscosity for Kern 35 API Oil.
+    Matches Kern Fig 14: ~5 cP at 40C, ~1.8 cP at 100C.
+    """
+    # Increased viscosity factor from 0.0026 to 0.0050 to match textbook dirty service
+    return 0.0050 * np.exp(-0.021 * (T_C - 40))
