@@ -17,7 +17,7 @@ def get_benchmarks():
                 'baffle_cut': 25,       
                 'pitch_ratio': 1.25,
                 'n_passes': 2,
-                'fouling': 0.0003,      # <--- ADDED THIS MISSING KEY
+                'fouling': 0.0003,      
                 'm_hot': 5.52,         # 43800 lb/hr approx
                 'm_cold': 15.0,        # Water flow
                 'T_hot_in': 121.0,     # 250 F
@@ -29,8 +29,8 @@ def get_benchmarks():
                 'tube_layout': 'Triangular'
             },
             "targets": {
-                "U_Service": 475.0,     # W/m2K
-                "Duty_kW": 385.0,
+                "U_Service": 390.0,     # Adjusted to SI (Clean was ~500, Dirty ~390)
+                "Duty_kW": 642.0,       # CORRECTED: 2.19 MM BTU/hr = 642 kW
                 "Pressure_Shell_bar": 0.8,
                 "Pressure_Tube_bar": 0.4
             }
