@@ -3,7 +3,8 @@ import pandas as pd
 import plotly.express as px
 
 # --- IMPORTS ---
-from src.core.segmental_solver import SegmentalSolver  # <-- NEW SOLVER
+from src.core.segmental_solver import SegmentalSolver
+from src.core.optimizer import DesignOptimizer  # <-- NEW OPTIMIZER IMPORT
 from src.core.properties import get_available_fluids
 from src.data.materials import MaterialDB
 from src.mechanical.vibration import VibrationCheck
@@ -98,13 +99,40 @@ def render_designer():
             c_m = st.number_input("Mass Flow (kg/s)", 0.1, 500.0, defaults.get('m_cold', 15.0))
             c_t = st.number_input("Inlet Temp (°C)", 0.0, 500.0, defaults.get('T_cold_in', 25.0))
             
-        submitted = st.form_submit_button("🚀 Run Engineering Analysis", type="primary")
+        # BUTTONS ROW
+        st.markdown("---")
+        c_btn1, c_btn2 = st.columns([1, 1])
+        with c_btn1:
+            submitted = st.form_submit_button("🚀 Run Engineering Analysis", type="primary")
+        with c_btn2:
+            optimize_btn = st.form_submit_button("✨ AI Auto-Optimize Design")
 
     if c_save.button("💾 Save Project State"):
-        # Save logic (simplified for UI)
         st.toast("Project Saved to Database!")
 
-    # --- RESULTS SECTION ---
+    # --- LOGIC: OPTIMIZER ---
+    if optimize_btn:
+        st.info("🤖 AI is iterating through geometric combinations to find the best Safe Design...")
+        
+        # Base inputs (Geometry will be overwritten by optimizer)
+        base_inputs = {
+            'length': length, 'tube_od': 0.019, 'pitch_ratio': 1.25, 'baffle_cut': 25,
+            'n_passes': 2, 'fouling': 0.0002,
+            'm_hot': h_m, 'm_cold': c_m, 'T_hot_in': h_t, 'T_cold_in': c_t,
+            'hot_fluid': h_f, 'cold_fluid': c_f
+        }
+        
+        optimizer = DesignOptimizer()
+        best_designs = optimizer.run_optimization(base_inputs)
+        
+        if not best_designs.empty:
+            st.success("✅ Optimization Complete! Top 3 Recommended Designs:")
+            st.dataframe(best_designs, use_container_width=True, hide_index=True)
+            st.markdown("*(Update your inputs above with these values to proceed)*")
+        else:
+            st.warning("⚠️ No safe designs found for these process conditions. Try increasing Tube Length.")
+
+    # --- LOGIC: ANALYSIS ---
     if submitted:
         inputs = {
             'shell_id': shell_id, 'length': length, 'n_tubes': n_tubes,
@@ -134,12 +162,9 @@ def render_designer():
                 k2.metric("✨ Service U", f"{res['U']:.1f} W/m²K")
                 k3.metric("📐 Area Req.", f"{res['Area']:.1f} m²")
                 k4.metric("🌡️ Hot Outlet", f"{res['T_hot_out']:.1f} °C")
-                
-                # Simple visual
-                st.caption("Thermal Performance Summary")
-                st.progress(min(res['U']/1000, 1.0)) # Visual bar for efficiency
+                st.progress(min(res['U']/1000, 1.0))
 
-            # TAB 2: ZONE ANALYSIS (The "Explainability" Feature)
+            # TAB 2: ZONE ANALYSIS
             with t2:
                 st.markdown("#### 🔬 Segmental Analysis (10-Zone Model)")
                 st.markdown("Property variations and heat transfer rates calculated stepwise along the exchanger length.")
