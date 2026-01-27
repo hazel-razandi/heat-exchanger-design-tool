@@ -75,4 +75,3 @@ class DesignOptimizer:
             df = df.sort_values('U-Value', ascending=False).head(3)
             
         return df
-
