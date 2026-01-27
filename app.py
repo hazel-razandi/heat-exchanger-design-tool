@@ -1,30 +1,27 @@
 import streamlit as st
-# Force Reload Fix: v2.0 (This comment forces the cloud server to restart)
 import pandas as pd
 import plotly.express as px
 
 # --- IMPORTS ---
-# If these fail, the server is still caching the old folder structure.
-# Reboot the app from the dashboard if the error persists.
 from src.core.segmental_solver import SegmentalSolver
 from src.core.optimizer import DesignOptimizer
 from src.core.properties import get_available_fluids
 from src.data.materials import MaterialDB
-from src.mechanical.vibration import VibrationCheck
-from src.mechanical.api_660 import API660Validator
+# --- CHANGED IMPORTS HERE: mechanical -> safety_checks ---
+from src.safety_checks.vibration import VibrationCheck
+from src.safety_checks.api_660 import API660Validator
+# ---------------------------------------------------------
 from src.platform.auth import render_login
 from src.platform.project_db import save_project, load_project, get_project_list
 from src.business.tema_exporter import generate_tema_sheet
 from src.business.quote_generator import create_pdf_quote
 
-# --- PAGE CONFIG ---
 st.set_page_config(page_title="ExchangerAI Enterprise", layout="wide", page_icon="🏭")
 
-# --- CUSTOM CSS (Industry Look) ---
+# --- CUSTOM CSS ---
 st.markdown("""
 <style>
     .main-header {font-size: 2.5rem; color: #0F172A; font-weight: 700;}
-    .sub-header {font-size: 1.5rem; color: #334155; font-weight: 600;}
     .metric-card {background-color: #F8FAFC; border: 1px solid #E2E8F0; padding: 20px; border-radius: 10px; text-align: center;}
     .success-box {padding:15px; background-color:#DCFCE7; color:#166534; border-radius:8px; border: 1px solid #86EFAC;}
     .warning-box {padding:15px; background-color:#FEF9C3; color:#854D0E; border-radius:8px; border: 1px solid #FDE047;}
@@ -33,13 +30,10 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- SESSION STATE ---
 if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
 if 'user' not in st.session_state: st.session_state['user'] = None
 
-# --- MAIN APP LOGIC ---
 def main_app():
-    # Sidebar
     with st.sidebar:
         st.markdown(f"### 👤 Engineer: {st.session_state['user']}")
         menu = st.radio("Navigation", ["📂 Project Hub", "🛠️ Design Workspace", "🚪 Logout"])
@@ -57,30 +51,24 @@ def main_app():
 def render_projects():
     st.markdown('<p class="main-header">📂 Project Hub</p>', unsafe_allow_html=True)
     projects = get_project_list()
-    
     if not projects:
-        st.info("No saved projects found. Go to 'Design Workspace' to start.")
+        st.info("No saved projects found.")
         return
-
     for p in projects:
         with st.container():
             c1, c2 = st.columns([5, 1])
             c1.subheader(f"📄 {p}")
-            if c2.button("Load Project", key=p, type="secondary"):
+            if c2.button("Load", key=p):
                 st.session_state['loaded_project'] = load_project(p)
-                st.success(f"Loaded '{p}' successfully!")
+                st.success(f"Loaded '{p}'")
 
 def render_designer():
     st.markdown('<p class="main-header">🛠️ Thermal & Mechanical Workspace</p>', unsafe_allow_html=True)
     
-    # Project Toolbar
     c_proj, c_save = st.columns([3, 1])
     proj_name = c_proj.text_input("Project Reference Name", value="Design-001")
-    
-    # Load Defaults
     defaults = st.session_state.get('loaded_project', {}).get('inputs', {})
     
-    # --- INPUT SECTION ---
     with st.form("design_form"):
         st.markdown("### 1. Geometry & Construction")
         c1, c2, c3, c4 = st.columns(4)
@@ -102,40 +90,30 @@ def render_designer():
             c_m = st.number_input("Mass Flow (kg/s)", 0.1, 500.0, defaults.get('m_cold', 15.0))
             c_t = st.number_input("Inlet Temp (°C)", 0.0, 500.0, defaults.get('T_cold_in', 25.0))
             
-        # BUTTONS ROW
         st.markdown("---")
         c_btn1, c_btn2 = st.columns([1, 1])
-        with c_btn1:
-            submitted = st.form_submit_button("🚀 Run Engineering Analysis", type="primary")
-        with c_btn2:
-            optimize_btn = st.form_submit_button("✨ AI Auto-Optimize Design")
+        with c_btn1: submitted = st.form_submit_button("🚀 Run Analysis", type="primary")
+        with c_btn2: optimize_btn = st.form_submit_button("✨ AI Auto-Optimize")
 
-    if c_save.button("💾 Save Project State"):
-        st.toast("Project Saved to Database!")
+    if c_save.button("💾 Save Project"):
+        st.toast("Project Saved!")
 
-    # --- LOGIC: OPTIMIZER ---
     if optimize_btn:
-        st.info("🤖 AI is iterating through geometric combinations to find the best Safe Design...")
-        
-        # Base inputs (Geometry will be overwritten by optimizer)
+        st.info("🤖 AI is iterating through geometric combinations...")
         base_inputs = {
             'length': length, 'tube_od': 0.019, 'pitch_ratio': 1.25, 'baffle_cut': 25,
             'n_passes': 2, 'fouling': 0.0002,
             'm_hot': h_m, 'm_cold': c_m, 'T_hot_in': h_t, 'T_cold_in': c_t,
             'hot_fluid': h_f, 'cold_fluid': c_f
         }
-        
         optimizer = DesignOptimizer()
-        best_designs = optimizer.run_optimization(base_inputs)
-        
-        if not best_designs.empty:
-            st.success("✅ Optimization Complete! Top 3 Recommended Designs:")
-            st.dataframe(best_designs, use_container_width=True, hide_index=True)
-            st.markdown("*(Update your inputs above with these values to proceed)*")
+        best = optimizer.run_optimization(base_inputs)
+        if not best.empty:
+            st.success("✅ Top 3 Safe Designs:")
+            st.dataframe(best, use_container_width=True, hide_index=True)
         else:
-            st.warning("⚠️ No safe designs found for these process conditions. Try increasing Tube Length.")
+            st.warning("⚠️ No safe designs found.")
 
-    # --- LOGIC: ANALYSIS ---
     if submitted:
         inputs = {
             'shell_id': shell_id, 'length': length, 'n_tubes': n_tubes,
@@ -144,58 +122,39 @@ def render_designer():
             'm_hot': h_m, 'm_cold': c_m, 'T_hot_in': h_t, 'T_cold_in': c_t,
             'hot_fluid': h_f, 'cold_fluid': c_f
         }
-        
         try:
-            # 1. RUN PHYSICS
             solver = SegmentalSolver(n_zones=10)
             res = solver.run(inputs)
             
-            # 2. RUN SAFETY
+            # RUN NEW DETAILED CHECKS
             vib = VibrationCheck(inputs, res).run_check()
             hyd = API660Validator(inputs, res).check_rho_v2()
             
-            # --- TABS FOR OUTPUT ---
             st.divider()
-            t1, t2, t3, t4 = st.tabs(["📊 Performance", "📈 Zone Analysis", "🛡️ Mechanical Audit", "📥 Commercial Export"])
+            t1, t2, t3, t4 = st.tabs(["📊 Performance", "📈 Zone Analysis", "🛡️ Mechanical Audit", "📥 Exports"])
             
-            # TAB 1: KPI DASHBOARD
             with t1:
                 k1, k2, k3, k4 = st.columns(4)
-                k1.metric("🔥 Total Duty", f"{res['Q']/1000:.1f} kW")
-                k2.metric("✨ Service U", f"{res['U']:.1f} W/m²K")
-                k3.metric("📐 Area Req.", f"{res['Area']:.1f} m²")
-                k4.metric("🌡️ Hot Outlet", f"{res['T_hot_out']:.1f} °C")
+                k1.metric("Duty", f"{res['Q']/1000:.1f} kW")
+                k2.metric("U-Value", f"{res['U']:.1f}")
+                k3.metric("Area", f"{res['Area']:.1f} m²")
+                k4.metric("Outlet T", f"{res['T_hot_out']:.1f} °C")
                 st.progress(min(res['U']/1000, 1.0))
 
-            # TAB 2: ZONE ANALYSIS
             with t2:
-                st.markdown("#### 🔬 Segmental Analysis (10-Zone Model)")
-                st.markdown("Property variations and heat transfer rates calculated stepwise along the exchanger length.")
-                
-                # Chart
-                df = res['zone_df']
-                fig = px.line(df, x="Zone", y=["T_Hot (°C)", "T_Cold (°C)"], markers=True, 
-                              title="Temperature Cross Profile", color_discrete_sequence=["#EF4444", "#3B82F6"])
-                st.plotly_chart(fig, use_container_width=True)
-                
-                # Data Table
-                st.dataframe(df, use_container_width=True, hide_index=True)
+                st.subheader("Temperature Profile")
+                st.line_chart(res['zone_df'][['T_Hot (°C)', 'T_Cold (°C)']])
+                st.dataframe(res['zone_df'], use_container_width=True)
 
-            # TAB 3: SAFETY SHIELD
             with t3:
-                st.markdown("#### 🛡️ Mechanical Integrity Audit Log")
-                
+                st.subheader("🛡️ Mechanical Integrity Audit Log")
                 c_vib, c_hyd = st.columns(2)
-                
                 with c_vib:
-                    st.markdown("#### 〰️ Vibration Analysis (Connors)")
+                    st.markdown("#### 〰️ Vibration Analysis")
                     if vib['status'] == "PASS":
                         st.markdown(f'<div class="success-box">✅ PASS</div>', unsafe_allow_html=True)
                     else:
                         st.markdown(f'<div class="error-box">❌ {vib["msg"]}</div>', unsafe_allow_html=True)
-                    
-                    # SHOW THE MATH
-                    st.markdown("**Calculated Physics:**")
                     st.json(vib['data'])
 
                 with c_hyd:
@@ -205,35 +164,17 @@ def render_designer():
                     else:
                         for w in hyd['items']:
                             st.markdown(f'<div class="warning-box">{w}</div>', unsafe_allow_html=True)
-                    
-                    # SHOW THE MATH
-                    st.markdown("**Calculated Physics:**")
                     st.json(hyd['data'])
 
-            # TAB 4: DOWNLOADS
             with t4:
-                st.markdown("#### 💼 Commercial Deliverables")
-                c_down1, c_down2 = st.columns(2)
-                
-                # Excel
-                xls_data = generate_tema_sheet(proj_name, inputs, res)
-                c_down1.download_button("📥 Download TEMA Datasheet (.xlsx)", 
-                                      data=xls_data, 
-                                      file_name=f"{proj_name}_TEMA.xlsx", 
-                                      mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                
-                # PDF
-                pdf_data = create_pdf_quote(proj_name, inputs, res, 15000)
-                c_down2.download_button("📄 Download Sales Quote (.pdf)", 
-                                      data=pdf_data, 
-                                      file_name=f"{proj_name}_Quote.pdf", 
-                                      mime="application/pdf")
+                c1, c2 = st.columns(2)
+                xls = generate_tema_sheet(proj_name, inputs, res)
+                c1.download_button("📥 TEMA Sheet", xls, f"{proj_name}.xlsx")
+                pdf = create_pdf_quote(proj_name, inputs, res, 15000)
+                c2.download_button("📄 PDF Quote", pdf, f"{proj_name}.pdf")
 
         except Exception as e:
-            st.error(f"Analysis Failed: {str(e)}")
+            st.error(f"Error: {str(e)}")
 
-# --- RUN ROUTER ---
-if st.session_state['logged_in']:
-    main_app()
-else:
-    render_login()
+if st.session_state['logged_in']: main_app()
+else: render_login()
