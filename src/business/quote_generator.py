@@ -1,3 +1,6 @@
+"""
+Professional PDF Quote Generator
+"""
 from fpdf import FPDF
 from datetime import datetime
 
@@ -44,9 +47,14 @@ def create_pdf_quote(project_name, inputs, results, cost_est):
 
     # Specs List
     pdf.set_font("Arial", size=10)
+    
+    # FIXED LINE BELOW
+    area_val = results.get('Area', 0)
+    duty_val = results.get('Q', 0) / 1000
+    
     specs = [
-        ("Design Duty", f"{results.get('Q', 0)/1000:.1f} kW"),
-        ("Heat Transfer Area", f"{results.get('Area', 0:.1f)} m2"),
+        ("Design Duty", f"{duty_val:.1f} kW"),
+        ("Heat Transfer Area", f"{area_val:.1f} m2"),
         ("Shell Diameter", f"{inputs.get('shell_id', 0)} m"),
         ("Tube Material", "Carbon Steel A516"),
         ("Design Code", "ASME Sec VIII Div 1 / TEMA Class R")
