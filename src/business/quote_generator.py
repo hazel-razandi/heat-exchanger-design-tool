@@ -52,7 +52,7 @@ def create_pdf_quote(project_name, inputs, results, price):
     )
     pdf.ln(5)
 
-    # 2. TECHNICAL SPECIFICATIONS (The New Data + Professional Layout)
+    # 2. TECHNICAL SPECIFICATIONS
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(190, 8, "  2. TECHNICAL BASIS OF DESIGN", 0, 1, 'L', 1)
     pdf.ln(2)
@@ -108,30 +108,38 @@ def create_pdf_quote(project_name, inputs, results, price):
     pdf.cell(50, 8, f"${price + 3000:,.2f}", 1, 1, 'R')
     pdf.set_text_color(0, 0, 0)
     
-    pdf.ln(8)
+    pdf.ln(10)
     
-    # 4. SCOPE & EXCLUSIONS (The "Real Company" Stuff)
+    # 4. SCOPE & EXCLUSIONS
     pdf.set_font("Arial", 'B', 10)
-    pdf.cell(0, 6, "SCOPE OF SUPPLY:", 0, 1)
+    pdf.cell(0, 6, "4. SCOPE OF SUPPLY:", 0, 1)
     pdf.set_font("Arial", '', 9)
     pdf.multi_cell(0, 5, "- Complete vessel with shell, tubes, baffles, and channels.\n- Counter flanges with fasteners and gaskets.\n- Saddle supports welded to shell.\n- Primer painting (1 coat).")
     
-    pdf.ln(3)
+    pdf.ln(5)
+    
+    # Check for page break space before Exclusions
+    if pdf.get_y() > 240: pdf.add_page()
+    
     pdf.set_font("Arial", 'B', 10)
-    pdf.cell(0, 6, "EXCLUSIONS:", 0, 1)
+    pdf.cell(0, 6, "5. EXCLUSIONS:", 0, 1)
     pdf.set_font("Arial", '', 9)
     pdf.multi_cell(0, 5, "- Civil foundations and anchor bolts.\n- External piping, valves, and instruments.\n- Thermal insulation and cladding.\n- Site erection and commissioning.")
 
-    # 5. TERMS (Legal Footer)
-    pdf.set_y(-55)
-    pdf.set_font("Arial", 'B', 9)
-    pdf.cell(0, 6, "COMMERCIAL TERMS:", 0, 1)
+    pdf.ln(8)
+
+    # 5. COMMERCIAL TERMS
+    # Check for page break space before Terms
+    if pdf.get_y() > 220: pdf.add_page()
+
+    pdf.set_font("Arial", 'B', 10)
+    pdf.cell(0, 6, "6. COMMERCIAL TERMS & CONDITIONS:", 0, 1)
     pdf.set_font("Arial", '', 8)
-    pdf.multi_cell(0, 4, 
+    pdf.multi_cell(0, 5, 
         "1. DELIVERY: 14-16 Weeks from drawing approval.\n"
         "2. PAYMENT: 30% Advance, 60% Against Proforma Invoice, 10% against Performance Bank Guarantee (PBG).\n"
         "3. WARRANTY: 12 months from commissioning or 18 months from dispatch.\n"
-        "4. FORCE MAJEURE: Standard clauses apply.\n"
+        "4. FORCE MAJEURE: Standard clauses apply as per ICC 2020.\n"
         "5. VALIDITY: This offer is valid for 30 days."
     )
 
