@@ -1,124 +1,49 @@
+import pandas as pd
 import io
-import xlsxwriter
-from datetime import datetime
 
 def generate_tema_sheet(project_name, inputs, results):
+    """
+    Generates a TEMA-style datasheet with Mechanical Specs.
+    """
+    # Create dictionary mapping TEMA fields to values
+    data = {
+        "Parameter": [
+            "Project Reference", "TEMA Type", "Shell ID (m)", "Tube Length (m)", 
+            "Tube Count", "Number of Passes", "Tube Pattern", 
+            "--- PERFORMANCE ---",
+            "Duty (kW)", "U-Value (W/m2K)", "Area (m2)",
+            "Hot Fluid", "Cold Fluid",
+            "--- MECHANICAL DESIGN ---",
+            "Design Pressure (Shell/Tube)", "Design Temp (Shell/Tube)",
+            "Shell Material", "Tube Material",
+            "Corrosion Allowance (mm)", "Nozzles (In/Out)"
+        ],
+        "Value": [
+            project_name, inputs.get('tema_type'), inputs.get('shell_id'), inputs.get('length'),
+            inputs.get('n_tubes'), inputs.get('n_passes'), inputs.get('tube_layout'),
+            "", # Spacer
+            f"{results['Q']/1000:.2f}", f"{results['U']:.2f}", f"{results['Area']:.2f}",
+            inputs.get('hot_fluid'), inputs.get('cold_fluid'),
+            "", # Spacer
+            f"{inputs.get('des_press_shell')} / {inputs.get('des_press_tube')} bar",
+            f"{inputs.get('des_temp_shell')} / {inputs.get('des_temp_tube')} °C",
+            inputs.get('mat_shell'), inputs.get('mat_tube'),
+            f"{inputs.get('corr_allow')} mm",
+            f"{inputs.get('noz_in')} / {inputs.get('noz_out')}"
+        ]
+    }
+    
+    df = pd.read_json(json.dumps(data)) # Quick dataframe creation
+    
+    # Save to Excel buffer
     output = io.BytesIO()
-    workbook = xlsxwriter.Workbook(output, {'in_memory': True})
-    sheet = workbook.add_worksheet("TEMA Specification")
-
-    # --- PROFESSIONAL STYLES ---
-    # 1. The "Header" Style (Grey background, Thick border)
-    fmt_header_main = workbook.add_format({
-        'bold': True, 'font_size': 14, 'align': 'center', 'valign': 'vcenter',
-        'bg_color': '#D9D9D9', 'border': 2
-    })
-    
-    # 2. The "Section" Style (Blue background, White text)
-    fmt_section = workbook.add_format({
-        'bold': True, 'font_size': 11, 'font_color': 'white',
-        'bg_color': '#2F5597', 'border': 1, 'align': 'left', 'indent': 1
-    })
-
-    # 3. The "Label" Style (Bold left column)
-    fmt_label = workbook.add_format({
-        'bold': True, 'font_size': 10, 'align': 'left', 'border': 1, 'bg_color': '#F2F2F2'
-    })
-
-    # 4. The "Data" Style (Standard data cells)
-    fmt_data = workbook.add_format({
-        'font_size': 10, 'align': 'center', 'border': 1
-    })
-    
-    # 5. The "Number" Style (2 decimal places)
-    fmt_num = workbook.add_format({
-        'font_size': 10, 'align': 'center', 'border': 1, 'num_format': '0.00'
-    })
-
-    # --- LAYOUT SETUP ---
-    sheet.set_column('A:A', 35)  # Label Column (Wide)
-    sheet.set_column('B:B', 25)  # Shell Side Data
-    sheet.set_column('C:C', 25)  # Tube Side Data
-    sheet.set_row(0, 35)         # Title Row Height
-
-    # --- TITLE BLOCK ---
-    sheet.merge_range('A1:C1', "HEAT EXCHANGER SPECIFICATION SHEET (TEMA)", fmt_header_main)
-    sheet.merge_range('A2:C2', f"Project: {project_name} | Date: {datetime.now().strftime('%Y-%m-%d')}", fmt_data)
-
-    # --- SECTION 1: PERFORMANCE DATA ---
-    sheet.merge_range('A4:C4', "1. PERFORMANCE DATA", fmt_section)
-    
-    # Column Headers
-    sheet.write('A5', "PARAMETER", fmt_label)
-    sheet.write('B5', "SHELL SIDE (Cold)", fmt_label)
-    sheet.write('C5', "TUBE SIDE (Hot)", fmt_label)
-
-    # Data Rows
-    row = 5
-    data_points = [
-        ("Fluid Name", inputs.get('cold_fluid', 'N/A'), inputs.get('hot_fluid', 'N/A')),
-        ("Mass Flow Rate (kg/s)", inputs.get('m_cold', 0), inputs.get('m_hot', 0)),
-        ("Inlet Temperature (°C)", inputs.get('T_cold_in', 0), inputs.get('T_hot_in', 0)),
-        ("Outlet Temperature (°C)", results.get('T_cold_out', 0), results.get('T_hot_out', 0)),
-        ("Operating Pressure (Bar G)", "10.0", "10.0"),
-        ("Velocity (m/s)", results.get('v_shell', 0), results.get('v_tube', 0)),
-        ("Fouling Factor", "0.0002", "0.0002")
-    ]
-
-    for label, shell_val, tube_val in data_points:
-        sheet.write(row, 0, label, fmt_label)
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='TEMA Data')
         
-        # Formatting check: Is it a number?
-        s_style = fmt_num if isinstance(shell_val, (int, float)) else fmt_data
-        t_style = fmt_num if isinstance(tube_val, (int, float)) else fmt_data
+        # Auto-adjust column width
+        worksheet = writer.sheets['TEMA Data']
+        worksheet.set_column('A:A', 30)
+        worksheet.set_column('B:B', 20)
         
-        sheet.write(row, 1, shell_val, s_style)
-        sheet.write(row, 2, tube_val, t_style)
-        row += 1
-
-    # --- SECTION 2: PERFORMANCE RESULTS ---
-    row += 1
-    sheet.merge_range(f'A{row+1}:C{row+1}', "2. CALCULATED PERFORMANCE", fmt_section)
-    row += 1
-    
-    kpis = [
-        ("Total Heat Duty (kW)", results.get('Q', 0)/1000),
-        ("Effective Heat Transfer Area (m²)", results.get('Area', 0)),
-        ("Overall U (Service) (W/m²K)", results.get('U', 0)),
-        ("LMTD (Corrected) (°C)", results.get('LMTD', 0)) # Assuming LMTD is in results, otherwise 0
-    ]
-
-    for label, val in kpis:
-        sheet.write(row, 0, label, fmt_label)
-        sheet.merge_range(f'B{row+1}:C{row+1}', val, fmt_num)
-        row += 1
-
-    # --- SECTION 3: CONSTRUCTION ---
-    row += 1
-    sheet.merge_range(f'A{row+1}:C{row+1}', "3. CONSTRUCTION DETAILS", fmt_section)
-    row += 1
-
-    mech_specs = [
-        ("TEMA Type", "BEM (Fixed Tubesheet)"),
-        ("Shell Diameter (m)", inputs.get('shell_id', 0)),
-        ("Tube Length (m)", inputs.get('length', 0)),
-        ("Number of Tubes", inputs.get('n_tubes', 0)),
-        ("Tube OD (mm)", "19.05"),
-        ("Tube Pattern", "Triangular (30°)"),
-        ("Baffle Spacing (m)", inputs.get('baffle_spacing', 0)),
-        ("Baffle Cut (%)", "25%")
-    ]
-
-    for label, val in mech_specs:
-        sheet.write(row, 0, label, fmt_label)
-        sheet.merge_range(f'B{row+1}:C{row+1}', val, fmt_data) # Mechanical data usually standard format
-        row += 1
-
-    # --- FOOTER ---
-    row += 2
-    footer_text = "Generated by ExchangerAI Enterprise v6.0. Preliminary Design Only. Verify with HTRI/Aspen before fabrication."
-    sheet.merge_range(f'A{row+1}:C{row+1}', footer_text, workbook.add_format({'italic': True, 'align': 'center', 'font_color': 'gray'}))
-
-    workbook.close()
-    output.seek(0)
-    return output
+    return output.getvalue()
+import json
